@@ -1,5 +1,6 @@
 # docker compose up -d   ->   UI and API on http://localhost:8000
-# Copy .env.example to .env and set LLM_API_KEY; copy config/config.example.yml to config/config.yml and adapt it.
+# Everything is set up in the web UI (key, models, MQTT, meters) and kept in the volume below.
+# Optional: copy .env.example to .env (LLM_API_KEY), or start from a file: see config/config.example.yml.
 services:
   zaehler-agent:
     image: ghcr.io/dominikludwig1995/zaehler-agent:latest
@@ -7,13 +8,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
-      CONFIG_FILE: /config/config.yml
       DATA_DIR: /data
+      # READ_ONLY: "true"   # show everything, change nothing
     volumes:
-      - ./config/config.yml:/config/config.yml:ro
       - zaehler-data:/data
+      # - ./config/config.yml:/app/config/config.yml:ro   # optional: start from a file
 
   # Optional: a local broker, if you have none. Point mqtt.host at "mosquitto" and enable it with
   #   docker compose --profile mqtt up -d

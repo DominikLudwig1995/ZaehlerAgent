@@ -5,7 +5,7 @@ import pytest
 import respx
 from PIL import Image
 
-from app.vision import OPENROUTER_URL, VisionClient, VisionError, parse_answer, prepare_image
+from app.vision import CHAT_URL, VisionClient, VisionError, parse_answer, prepare_image
 
 
 def test_parse_answer_is_tolerant():
@@ -31,7 +31,7 @@ def test_prepare_image_crops_and_enlarges(jpeg):
 
 @respx.mock
 async def test_read_sends_the_image_and_returns_digits_and_cost(gas, jpeg):
-    route = respx.post(OPENROUTER_URL).mock(
+    route = respx.post(CHAT_URL).mock(
         return_value=httpx.Response(
             200,
             json={
@@ -49,7 +49,7 @@ async def test_read_sends_the_image_and_returns_digits_and_cost(gas, jpeg):
 
 @respx.mock
 async def test_read_reports_failures(gas, jpeg):
-    respx.post(OPENROUTER_URL).mock(return_value=httpx.Response(500))
+    respx.post(CHAT_URL).mock(return_value=httpx.Response(500))
     with pytest.raises(VisionError):
         await VisionClient("key", "m/x").read(jpeg, gas)
     with pytest.raises(VisionError):

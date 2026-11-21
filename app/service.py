@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -23,7 +24,7 @@ from app.mqtt_ha import (
 )
 from app.plausibility import Decision, Reading, decide, vote
 from app.storage import History
-from app.vision import VisionClient, VisionError, prepare_image
+from app.vision import VisionClient, prepare_image
 
 log = logging.getLogger("zaehler")
 
@@ -47,7 +48,10 @@ class MeterService:
         http: httpx.AsyncClient | None = None,
         history: History | None = None,
         metrics: Metrics | None = None,
+        publisher_factory: Callable[[Settings], Publisher | None] | None = None,
     ) -> None:
+        self.publisher_factory = publisher_factory
+        self._wake = asyncio.Event()
         self.history = history or History(settings.data_dir, settings.history_days)
         self.metrics = metrics or Metrics()
         self.settings = settings
@@ -67,19 +71,98 @@ class MeterService:
             return
         publish_discovery(self.publisher, self.settings)
         for m in self.settings.meters:
-            stored = self.publisher.retained(state_topic(self.settings, m))
-            attrs = self.publisher.retained(attributes_topic(self.settings, m))
-            at = datetime.now(UTC)
-            with contextlib.suppress(KeyError, ValueError, TypeError):
-                at = datetime.fromisoformat(json.loads(attrs or "{}")["updated"])
-            if stored:
-                self.state[m.name].last = Reading(float(stored), at)
-            elif m.initial_value is not None:
-                # Old on purpose: the value may be days old, so the rate window must be wide at first.
-                self.state[m.name].last = Reading(
-                    m.initial_value, datetime.now(UTC) - timedelta(days=3)
-                )
-            log.info("%s starts at %s", m.name, self.state[m.name].last)
+            self._init_meter(m)
+
+    def _init_meter(self, m: Meter) -> None:
+        st = self.state.setdefault(m.name, MeterState())
+        stored = self.publisher.retained(state_topic(self.settings, m)) if self.publisher else None
+        attrs = (
+            self.publisher.retained(attributes_topic(self.settings, m)) if self.publisher else None
+        )
+        at = datetime.now(UTC)
+        with contextlib.suppress(KeyError, ValueError, TypeError):
+            at = datetime.fromisoformat(json.loads(attrs or "{}")["updated"])
+        if stored:
+            st.last = Reading(float(stored), at)
+        elif m.initial_value is not None:
+            # Old on purpose: the value may be days old, so the rate window must be wide at first.
+            st.last = Reading(m.initial_value, datetime.now(UTC) - timedelta(days=3))
+        log.info("%s starts at %s", m.name, st.last)
+
+    # -- changes from the UI -----------------------------------------------------------------------
+    def reconfigure(self, new: Settings) -> None:
+        """Apply new settings without a restart: meters, models, key, MQTT."""
+        old = self.settings
+        self.settings = new
+        old_by, new_by = {m.name: m for m in old.meters}, {m.name: m for m in new.meters}
+        mqtt_changed = (
+            old.mqtt_host,
+            old.mqtt_port,
+            old.mqtt_user,
+            old.mqtt_password,
+            old.topic_prefix,
+        ) != (
+            new.mqtt_host,
+            new.mqtt_port,
+            new.mqtt_user,
+            new.mqtt_password,
+            new.topic_prefix,
+        )
+        if mqtt_changed and self.publisher_factory is not None:
+            self._clear_discovery(old, [m.name for m in old.meters])
+            if self.publisher is not None:
+                self.publisher.close()
+            self.publisher = self.publisher_factory(new)
+            added = list(new_by)
+        else:
+            self._clear_discovery(old, [n for n in old_by if n not in new_by])
+            added = [n for n in new_by if n not in old_by]
+        for name in [n for n in self.state if n not in new_by]:
+            del self.state[name]
+        for name, m in new_by.items():
+            self.state.setdefault(name, MeterState())
+            if old_by.get(name) != m:
+                self.state[name].image_hash = ""  # a changed meter is read again at the next round
+        self.vision.api_key, self.vision.base_url = new.llm_api_key, new.llm_base_url.rstrip("/")
+        self.vision.model = new.models[0]
+        if self.publisher is not None:
+            publish_discovery(self.publisher, new)
+            for name in added:
+                self._init_meter(new_by[name])
+        self._wake.set()
+
+    def _clear_discovery(self, settings: Settings, names: list[str]) -> None:
+        if self.publisher is None:
+            return
+        for name in names:
+            self.publisher.publish(
+                f"{settings.discovery_prefix}/sensor/zaehler_agent_{name}/config", ""
+            )
+
+    async def test_read(self, meter: Meter) -> dict:
+        """One reading for the setup form: fetch, read with every model, vote. Nothing is stored or published."""
+        try:
+            r = await self.http.get(meter.image_url, headers=meter.image_headers)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            return {"ok": False, "error": f"camera: {str(exc)[:120]}"}
+        results = await asyncio.gather(
+            *(self.vision.read(r.content, meter, model=m) for m in self.settings.models),
+            return_exceptions=True,
+        )
+        good = [x for x in results if not isinstance(x, BaseException)]
+        self._spent += sum(x.cost_usd for x in good)
+        if not good:
+            return {"ok": False, "error": "; ".join(str(x)[:80] for x in results)}
+        digits, agreement, _ = vote([x.digits for x in good])
+        return {
+            "ok": True,
+            "digits": digits,
+            "agreement": round(agreement, 2),
+            "samples": [x.digits for x in good],
+            "models": list(self.settings.models),
+            "cost_usd": round(sum(x.cost_usd for x in good), 5),
+        }
 
     # -- one reading ----------------------------------------------------------------------------
     def _budget_left(self) -> bool:
@@ -205,7 +288,9 @@ class MeterService:
                     await self.poll(meter)
                 except Exception:  # noqa: BLE001 -- the loop must survive anything
                     log.exception("poll of %s crashed", meter.name)
-            await asyncio.sleep(self.settings.interval_seconds)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._wake.wait(), self.settings.interval_seconds)
+            self._wake.clear()
 
     def snapshot(self) -> dict:
         return {
@@ -217,6 +302,3 @@ class MeterService:
             }
             for name, st in self.state.items()
         }
-
-
-__all__ = ["MeterService", "VisionError"]

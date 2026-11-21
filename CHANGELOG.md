@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0] - 2026-11-21
+
+- Everything is configurable in the web UI: models, API key and base URL, interval, budget, MQTT, and the meters.
+  Add, edit and delete cameras/meters at runtime; draw the crop on the camera picture, preview what the models
+  see, test a reading before saving. Home Assistant sensors are created and removed automatically.
+- UI changes are stored in `DATA_DIR/settings.json` (mode 600) and win over the config file and the environment;
+  "Reset" goes back, "Download as config.yml" exports a setup without secrets.
+- `READ_ONLY=true` disables every change (for a shared dashboard).
+- Breaking: `Settings.from_env` and `OPENROUTER_API_KEY` as Python names are gone (the environment variable
+  `OPENROUTER_API_KEY` still works as fallback for `LLM_API_KEY`). docker-compose no longer needs a config file.
+
 ## [1.2.0] - 2026-11-21
 
 - New UI: large value, status, what each model read, curve with time axis, pictures with zoom, set-by-hand form,

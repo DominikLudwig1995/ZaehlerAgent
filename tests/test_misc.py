@@ -12,7 +12,7 @@ def test_settings_from_env(tmp_path):
         "meters:\n  - {name: a, title: A, kind: gas, image_url: http://x/a.jpg, integer_digits: 4,"
         " decimals: 3, crop: [0, 0, 10, 10], max_rate_per_hour: 2.0}\n"
     )
-    s = Settings.from_env(
+    s = Settings.load(
         {
             "METERS_FILE": str(f),
             "MODELS": "a/b, c/d",
@@ -23,7 +23,7 @@ def test_settings_from_env(tmp_path):
     )
     assert s.models == ("a/b", "c/d") and s.interval_seconds == 60 and s.mqtt_host == "mq"
     assert s.max_daily_cost_usd == 0.1 and s.meters[0].digits == 7
-    assert Settings.from_env({"METERS_FILE": str(tmp_path / "missing.yml")}).meters == ()
+    assert Settings.load({"METERS_FILE": str(tmp_path / "missing.yml")}).meters == ()
 
 
 def test_evaluate_helpers(tmp_path, gas):

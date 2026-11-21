@@ -13,7 +13,7 @@ from PIL import Image, ImageOps
 
 from app.config import DEFAULT_LLM_BASE_URL, Meter
 
-OPENROUTER_URL = DEFAULT_LLM_BASE_URL + "/chat/completions"
+CHAT_URL = DEFAULT_LLM_BASE_URL + "/chat/completions"
 
 PROMPT = """You read a mechanical {kind} meter{unit_part}. The picture shows its row of digit wheels, {digits} wheels in all: \
 {integer} whole-number wheels (black digits) followed by {decimals} fraction wheels (usually red, they turn fast). \
@@ -36,6 +36,26 @@ class VisionError(RuntimeError):
     pass
 
 
+def _oriented(data: bytes, rotate: float, mirror: bool) -> Image.Image:
+    img = Image.open(io.BytesIO(data)).convert("L")
+    if mirror:
+        img = ImageOps.mirror(img)
+    if rotate:
+        img = img.rotate(rotate, expand=True, fillcolor=0)
+    return img
+
+
+def _jpeg(img: Image.Image) -> bytes:
+    out = io.BytesIO()
+    img.convert("RGB").save(out, format="JPEG", quality=92)
+    return out.getvalue()
+
+
+def oriented_jpeg(data: bytes, rotate: float = 0.0, mirror: bool = False) -> bytes:
+    """The picture after rotate/mirror, before the crop: the frame the crop rectangle is drawn in."""
+    return _jpeg(_oriented(data, rotate, mirror))
+
+
 def prepare_image(
     data: bytes,
     crop: tuple[int, int, int, int] | None = None,
@@ -43,20 +63,14 @@ def prepare_image(
     mirror: bool = False,
 ) -> bytes:
     """Mirror/rotate, crop the digit row, stretch the contrast and enlarge it: the models read much better."""
-    img = Image.open(io.BytesIO(data)).convert("L")
-    if mirror:
-        img = ImageOps.mirror(img)
-    if rotate:
-        img = img.rotate(rotate, expand=True, fillcolor=0)
+    img = _oriented(data, rotate, mirror)
     if crop:
         w, h = img.size
         x0, y0, x1, y1 = crop
         img = img.crop((max(0, x0), max(0, y0), min(w, x1), min(h, y1)))
     img = ImageOps.autocontrast(img, cutoff=1)
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
-    out = io.BytesIO()
-    img.convert("RGB").save(out, format="JPEG", quality=92)
-    return out.getvalue()
+    return _jpeg(img)
 
 
 def parse_answer(text: str, expected: int) -> tuple[str, float]:

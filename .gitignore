@@ -9,3 +9,8 @@ __pycache__/
 
 # Pictures and answers collected for the model comparison (python -m app.evaluate): not part of the repo.
 eval/
+
+# Local setup: your own config, secrets and the UI's data directory.
+config/config.yml
+.env
+data/
