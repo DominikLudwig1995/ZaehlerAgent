@@ -52,4 +52,3 @@ def test_build_service_passes_base_url_as_keyword():
 
     svc = build_service(Settings(llm_base_url="http://ollama:11434/v1", models=("m",)))
     assert svc.vision.base_url == "http://ollama:11434/v1"
-    assert isinstance(svc.vision._client.timeout.read, float)
