@@ -155,6 +155,17 @@ class MeterService:
         log.info("%s: %s %s (%s)", meter.name, decision.status, digits, decision.reason)
         return decision
 
+    def set_value(self, meter: Meter, value: float) -> dict:
+        """Calibration: set the counter to a value you read yourself (start value, or after a counter jump)."""
+        st = self.state[meter.name]
+        st.last = Reading(value, datetime.now(UTC))
+        st.status = "accepted"
+        st.detail = {"status": "accepted", "reason": "set by hand", "digits": ""}
+        self._record(meter, st, 0.0)
+        if self.publisher is not None:
+            publish_reading(self.publisher, self.settings, meter, value, st.detail)
+        return self.snapshot()[meter.name]
+
     def _record(self, meter: Meter, st: MeterState, cost: float) -> None:
         d, name = st.detail, meter.name
         self.history.add(name, d, st.last.value if st.last else None, cost)

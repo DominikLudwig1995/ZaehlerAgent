@@ -125,6 +125,19 @@ async def poll_now(name: str) -> dict:
     return service.snapshot()[name]
 
 
+@app.post("/api/meters/{name}/value")
+def set_value(name: str, body: dict) -> dict:
+    """Set the counter by hand: {"value": 3600.34}. For the start value, or after the counter was replaced."""
+    service, meter = _meter(name)
+    try:
+        value = float(body["value"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, 'body must be {"value": <number>}') from exc
+    if value < 0:
+        raise HTTPException(422, "value must not be negative")
+    return service.set_value(meter, value)
+
+
 @app.get("/")
 def ui() -> FileResponse:
     return FileResponse(STATIC / "index.html")

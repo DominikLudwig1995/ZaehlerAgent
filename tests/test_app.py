@@ -52,3 +52,16 @@ def test_build_service_passes_base_url_as_keyword():
 
     svc = build_service(Settings(llm_base_url="http://ollama:11434/v1", models=("m",)))
     assert svc.vision.base_url == "http://ollama:11434/v1"
+
+
+def test_set_value_endpoint(monkeypatch):
+    monkeypatch.setenv("CONFIG_FILE", "tests/meters.yml")
+    monkeypatch.delenv("MQTT_HOST", raising=False)
+    monkeypatch.setenv("INTERVAL_SECONDS", "3600")
+    with TestClient(app) as client:
+        r = client.post("/api/meters/gas/value", json={"value": 3600.34})
+        assert r.status_code == 200 and r.json()["value"] == 3600.34
+        assert r.json()["reason"] == "set by hand"
+        assert client.post("/api/meters/gas/value", json={"value": "x"}).status_code == 422
+        assert client.post("/api/meters/gas/value", json={"value": -1}).status_code == 422
+        assert client.post("/api/meters/x/value", json={"value": 1}).status_code == 404
