@@ -17,7 +17,7 @@ import re
 import sys
 from pathlib import Path
 
-from app.config import Meter, load_meters
+from app.config import DEFAULT_LLM_BASE_URL, Meter, load_meters
 from app.vision import VisionClient, VisionError
 
 
@@ -43,7 +43,11 @@ def score(digits: str, truth: str) -> tuple[int, int]:
 async def run(args: argparse.Namespace) -> int:
     meters = {m.name: m for m in load_meters(args.meters)}
     truth = dict(item.split("=") for item in args.truth.split(","))
-    client = VisionClient(os.environ.get("OPENROUTER_API_KEY", ""), args.models.split(",")[0])
+    client = VisionClient(
+        os.environ.get("LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY", ""),
+        args.models.split(",")[0],
+        base_url=os.environ.get("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
+    )
     files = sorted(Path(args.dir).glob("*.jpg"))
     summary: dict[tuple[str, str], list[int]] = {}
     cost = 0.0
@@ -93,7 +97,7 @@ def main() -> int:
     ap.add_argument("--dir", required=True)
     ap.add_argument("--truth", required=True, help="meter=leading digits, comma separated")
     ap.add_argument("--models", required=True, help="comma separated OpenRouter model ids")
-    ap.add_argument("--meters", default="config/meters.yml")
+    ap.add_argument("--meters", default="config/config.yml")
     return asyncio.run(run(ap.parse_args()))
 
 

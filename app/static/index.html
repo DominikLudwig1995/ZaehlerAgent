@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>zaehler-agent</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#1c2330;--card:#fff;--mut:#667085;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--line:#e4e7ec;--acc:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141b;--fg:#e6e9ef;--card:#182029;--mut:#98a2b3;--line:#2a3441;--acc:#6aa0ff}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif}
+header{padding:14px 16px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+h1{font-size:18px;margin:0}.mut{color:var(--mut);font-size:13px}
+main{display:grid;gap:14px;padding:0 16px 24px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.val{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;color:#fff;background:var(--mut)}
+.accepted,.unchanged{background:var(--ok)}.rejected{background:var(--warn)}.error{background:var(--bad)}
+img{max-width:100%;border-radius:6px;border:1px solid var(--line);margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+td,th{text-align:left;padding:3px 4px;border-bottom:1px solid var(--line)}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+svg{width:100%;height:70px;margin-top:6px}
+</style>
+</head>
+<body>
+<header><h1>zaehler-agent</h1><span class="mut" id="info"></span></header>
+<main id="meters"></main>
+<script>
+const $=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!==undefined)e.textContent=h;return e};
+const ago=ts=>{const s=Math.round(Date.now()/1000-ts);return s<90?s+" s":s<5400?Math.round(s/60)+" min":Math.round(s/3600)+" h"};
+function spark(series){
+  const ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 300 70");
+  if(series.length<2)return svg;
+  const xs=series.map(p=>p[0]),ys=series.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys)||1;
+  const pts=series.map(p=>((p[0]-x0)/((x1-x0)||1)*296+2)+","+(66-(p[1]-y0)/((y1-y0)||1)*62)).join(" ");
+  const l=document.createElementNS(ns,"polyline");l.setAttribute("points",pts);l.setAttribute("fill","none");
+  l.setAttribute("stroke","currentColor");l.setAttribute("stroke-width","2");svg.append(l);return svg}
+async function render(){
+  const [cfg,st]=await Promise.all([fetch("api/config").then(r=>r.json()),fetch("status").then(r=>r.json())]);
+  document.getElementById("info").textContent=`models: ${cfg.models.join(", ")} | every ${cfg.interval_seconds/60} min | `+
+    `cost today ${cfg.cost_today_usd} / ${cfg.max_daily_cost_usd} USD | MQTT ${cfg.mqtt?"on":"off"}`;
+  const root=document.getElementById("meters");root.replaceChildren();
+  for(const m of cfg.meters){
+    const s=st[m.name]||{},h=await fetch("api/history/"+m.name+"?limit=10").then(r=>r.json());
+    const c=$("section","card");
+    c.append($("div","mut",m.title));
+    c.append($("div","val",s.value==null?"-":s.value.toFixed(m.decimals)+" "+m.unit));
+    const p=$("span","pill "+(s.status||""),s.status||"starting");c.append(p);
+    if(s.reason)c.append($("span","mut"," "+s.reason));
+    c.append($("div","mut",`digits ${s.digits||"-"} | models ${(s.samples||[]).join(" / ")||"-"} | camera ${s.device_reading||"-"}`));
+    c.append(spark(h.series));
+    for(const crop of [false,true]){const i=$("img");i.src="api/image/"+m.name+"?crop="+crop+"&t="+Date.now();i.alt=m.title;i.onerror=()=>i.remove();c.append(i)}
+    const t=$("table");t.append(Object.assign($("tr"),{innerHTML:"<th>ago</th><th>status</th><th>digits</th><th>USD</th>"}));
+    for(const r of h.readings){const tr=$("tr");[ago(r.ts),r.status,r.digits||r.reason,r.cost.toFixed(4)].forEach(x=>tr.append($("td","",x)));t.append(tr)}
+    c.append(t);
+    const b=$("button","","Read now");b.onclick=async()=>{b.disabled=true;await fetch("poll/"+m.name,{method:"POST"});render()};c.append(b);
+    root.append(c)}
+}
+render();setInterval(render,30000);
+</script>
+</body>
+</html>

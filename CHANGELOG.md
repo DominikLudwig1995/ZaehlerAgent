@@ -1,0 +1,14 @@
+# Changelog
+
+## [1.0.0] - 2026-11-21
+
+First release.
+
+- Reads mechanical meters (gas, water, electricity, heat, any digit-wheel counter) from a camera picture with
+  vision models; the digits of several models are voted wheel by wheel.
+- Plausibility check: a counter never goes down and never advances faster than `max_rate_per_hour`.
+- Home Assistant sensors per meter through MQTT discovery (`total_increasing`, energy dashboard ready).
+- Web UI (`/`): value, last decision, camera picture and crop, history chart, "Read now".
+- Prometheus metrics (`/metrics`), history in SQLite, daily cost budget.
+- Generic: any OpenAI-compatible API (OpenRouter, OpenAI, Ollama, vLLM), any camera that serves a picture URL,
+  one YAML file for the config, `docker compose up -d` to run.

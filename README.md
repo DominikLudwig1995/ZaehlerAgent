@@ -1,11 +1,19 @@
 # zaehler-agent
 
-Reads the gas and the water meter with a vision model and reports the values to Home Assistant.
+[![CI](https://github.com/DominikLudwig1995/zaehler-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/DominikLudwig1995/zaehler-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DominikLudwig1995/zaehler-agent)](https://github.com/DominikLudwig1995/zaehler-agent/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Reads mechanical meters (gas, water, electricity, heat: digit wheels) with vision models and reports the values to Home Assistant.
+
+## Release notes
+
+**1.0.0** (2026-11-21): first release: multi-model voting, plausibility check, Home Assistant discovery, web UI, Prometheus metrics, history, docker compose. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 Two ESP32 cameras ([AI-on-the-edge-device](https://github.com/jomjol/AI-on-the-edge-device)) look at the digit
 wheels. Their own small neural network reads them badly (blurry wheels, glare, a camera that sits a bit off).
 This agent takes the pictures the cameras already produce, lets two different vision models read the wheels
-through [OpenRouter](https://openrouter.ai), votes the digits wheel by wheel and only publishes a value that fits
+through an OpenAI-compatible API (default [OpenRouter](https://openrouter.ai)), votes the digits wheel by wheel and only publishes a value that fits
 the last one: a counter never goes down and never advances faster than the pipe allows. The result is one
 `total_increasing` sensor per meter in Home Assistant (MQTT discovery), usable in the energy dashboard.
 
@@ -41,46 +49,72 @@ Cost: about 0.0005 USD per call, 192 calls a day at the default interval, roughl
 Run the comparison yourself (pictures from `/img_tmp/alg.jpg`, the camera's own answer from `/json`):
 
 ```bash
-OPENROUTER_API_KEY=... uv run python -m app.evaluate --dir eval --truth gas=3598,wasser=0015 \
+LLM_API_KEY=... uv run python -m app.evaluate --dir eval --truth gas=3598,wasser=0015 \
     --models openai/gpt-4o-mini,qwen/qwen3-vl-30b-a3b-instruct
 ```
 
+## Quick start (docker compose)
+
+```bash
+git clone https://github.com/DominikLudwig1995/zaehler-agent && cd zaehler-agent
+cp config/config.example.yml config/config.yml   # camera URLs, number of wheels, crop of the digit row
+cp .env.example .env                              # LLM_API_KEY=...
+docker compose up -d                              # UI and API: http://localhost:8000
+```
+
+Works with any OpenAI-compatible vision API (OpenRouter, OpenAI, Ollama, vLLM: `vision.base_url`) and any camera that
+serves a picture by URL (ESP32-CAM with AI-on-the-edge, IP camera snapshot, Frigate ...). Without `mqtt.host` it runs
+with UI and metrics only; `docker compose --profile mqtt up -d` adds a local Mosquitto.
+
 ## Configuration
 
-`config/meters.yml` describes the meters (camera URLs, number of wheels, crop of the digit row, the highest
-plausible rate in m³/h, a known start value). Everything else is environment:
+One YAML file (`config/config.yml`, see [config.example.yml](config/config.example.yml), every key explained). Secrets
+are never in the file: it names the variable (`api_key_env`, `password_env`). Environment variables override the file:
 
-| Variable             | Default                                                  | |
-|----------------------|----------------------------------------------------------|-|
-| `OPENROUTER_API_KEY` |                                                          | required |
-| `MODELS`             | `openai/gpt-4o-mini,qwen/qwen3-vl-30b-a3b-instruct`      | one call per model and reading, the digits are voted |
-| `INTERVAL_SECONDS`   | `1800`                                                   | a picture that did not change is skipped |
-| `MAX_DAILY_COST_USD` | `0.30`                                                   | when spent, the agent stops calling the model until midnight |
-| `MQTT_HOST/PORT/USER/PASSWORD` |                                                | without `MQTT_HOST` nothing is published (status page only) |
-| `TOPIC_PREFIX`       | `zaehler-agent`                                          | |
-| `DISCOVERY_PREFIX`   | `homeassistant`                                          | |
-| `METERS_FILE`        | `config/meters.yml`                                      | |
+| Variable | Default | |
+|----------|---------|-|
+| `CONFIG_FILE` | `config/config.yml` | |
+| `LLM_API_KEY` | | key of the vision API; empty for a local model |
+| `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | any OpenAI-compatible endpoint |
+| `MODELS` | `openai/gpt-4o-mini,qwen/qwen3-vl-30b-a3b-instruct` | one call per model and reading, digits are voted |
+| `INTERVAL_SECONDS` | `1800` | an unchanged picture is skipped |
+| `MAX_DAILY_COST_USD` | `0.30` | when spent, no model is called until midnight UTC (survives restarts) |
+| `MQTT_HOST/PORT/USER/PASSWORD` | | without host nothing is published |
+| `TOPIC_PREFIX`, `DISCOVERY_PREFIX` | `zaehler-agent`, `homeassistant` | |
+| `DATA_DIR`, `HISTORY_DAYS` | empty, `30` | SQLite history; empty = memory only |
 
-Home Assistant gets one sensor per meter (`sensor.zaehler_agent_gas`, `sensor.zaehler_agent_wasser`, `device_class` gas / water,
-`state_class` total_increasing). Attributes show the last decision (`accepted`, `unchanged`, `rejected`), the digits
-each model read, the camera's own reading and the cost of the day, so a wrong value can be traced. The last values are
-retained MQTT messages: a restart picks up where it stopped.
+Per meter: `name`, `title`, `kind` (gas, water, electricity, heat, generic: sets unit and Home Assistant class),
+`image_url` (+ `image_headers`), `integer_digits`, `decimals`, `crop`, `rotate`, `mirror`, `max_rate_per_hour`,
+`initial_value`, `device_json_url`.
 
-`GET /healthz` (liveness), `GET /status` (all meters), `POST /poll/{name}` (read one meter now).
+Home Assistant gets one `total_increasing` sensor per meter (MQTT discovery). Attributes show the decision
+(`accepted`, `unchanged`, `rejected`), the digits each model read, the camera's own reading and the cost of the day.
+The last values are retained MQTT messages, so a restart continues where it stopped.
 
-## Run and deploy
+## UI, API, metrics
+
+| | |
+|-|-|
+| `GET /` | web UI: value, decision, the camera picture and the crop the models saw, history chart, "Read now" |
+| `GET /status`, `/api/config`, `/api/history/{name}`, `/api/image/{name}?crop=` | JSON and pictures |
+| `POST /poll/{name}` | read one meter now |
+| `GET /healthz` | liveness |
+| `GET /metrics` | Prometheus: `zaehler_value`, `zaehler_readings_total{status}`, `zaehler_last_accepted_timestamp_seconds`, `zaehler_model_errors_total`, `zaehler_camera_errors_total`, `zaehler_cost_usd_today`, `zaehler_budget_exhausted`, `zaehler_agreement` |
+
+Suggested alerts (Prometheus): no accepted value for 6 h, readings only `rejected`, camera or model errors,
+budget exhausted, agent down.
+
+## Develop and release
 
 ```bash
 uv sync && uv run pytest && uv run ruff check . && uv run ruff format --check .
-OPENROUTER_API_KEY=... MQTT_HOST=... uv run uvicorn app.main:app --port 8000
+CONFIG_FILE=config/config.yml LLM_API_KEY=... uv run uvicorn app.main:app --port 8000
 ```
 
-The Woodpecker pipeline (`.woodpecker.yml`) tests, builds the image with Kaniko, pushes it to Harbor and rolls it
-out to Nomad with `deploy/nomad-deploy.sh deploy/nomad.hcl <image>` (a failed deployment reverts itself). The job
-reads its secrets from Vault (`secret/nomad/zaehler-agent`: `openrouter_api_key`, `mqtt_user`, `mqtt_password`).
-
-The cameras sit in a separate network. The Nomad nodes need HTTP access to them (port 80); the container is NATed
-to the node address.
+CI (GitHub Actions and Woodpecker): lint, tests with coverage, `pip-audit`; GitHub also runs a `docker compose`
+smoke test and Trivy. A tag `vX.Y.Z` builds the image (amd64, arm64) to `ghcr.io`, and creates the GitHub release with
+the notes from [CHANGELOG.md](CHANGELOG.md). The Woodpecker pipeline additionally deploys to Nomad
+(`deploy/nomad.hcl`, secrets from Vault).
 
 ## What it does not do
 

@@ -1,0 +1,38 @@
+# zaehler-agent: copy to config/config.yml and adapt. Secrets do NOT belong here: set them as environment
+# variables (docker-compose: .env). Every value can also be overridden by an environment variable (see README).
+
+interval_seconds: 1800        # how often every camera is read (an unchanged picture is skipped)
+max_daily_cost_usd: 0.30      # when spent, no model is called until midnight UTC
+# data_dir: /data             # keeps the history (SQLite) across restarts; docker-compose mounts it
+
+vision:
+  # Any OpenAI-compatible chat API with image input: OpenRouter, OpenAI, Ollama (http://ollama:11434/v1), vLLM ...
+  base_url: https://openrouter.ai/api/v1
+  api_key_env: LLM_API_KEY    # name of the variable that holds the key (empty is fine for a local model)
+  # One call per model and reading; the digits are voted wheel by wheel. Use different models.
+  models:
+    - openai/gpt-4o-mini
+    - qwen/qwen3-vl-30b-a3b-instruct
+
+mqtt:                         # leave host empty to run without MQTT (UI and /metrics only)
+  host: ""                    # e.g. mosquitto, 192.168.1.10
+  port: 1883
+  user: ""
+  password_env: MQTT_PASSWORD
+  topic_prefix: zaehler-agent
+  discovery_prefix: homeassistant   # Home Assistant MQTT discovery: sensors appear by themselves
+
+meters:
+  - name: gas                 # short id: topics, URLs, metrics
+    title: Gas meter
+    kind: gas                 # gas | water | electricity | heat | generic (sets unit and Home Assistant class)
+    image_url: http://192.168.1.50/img_tmp/alg.jpg   # any URL that returns a picture of the counter
+    # image_headers: {Authorization: "Bearer ${CAM_TOKEN}"}   # if the camera needs a login
+    integer_digits: 4         # wheels left of the decimal point
+    decimals: 3               # wheels right of it (usually the red ones)
+    crop: [10, 15, 640, 130]  # x0, y0, x1, y1 of the digit row in the picture (omit = whole picture)
+    # rotate: 0               # degrees counter-clockwise, before the crop
+    # mirror: false
+    max_rate_per_hour: 4.0    # the most the counter can plausibly advance per hour (in its unit)
+    initial_value: 1234.5     # start value until one is stored (retained MQTT or history)
+    # device_json_url: http://192.168.1.50/json   # AI-on-the-edge /json: shown next to the models' reading

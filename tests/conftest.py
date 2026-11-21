@@ -11,7 +11,7 @@ from app.config import Meter, Settings
 def gas() -> Meter:
     return Meter(
         name="gas",
-        title="Gaszähler",
+        title="Gaszaehler",
         kind="gas",
         image_url="http://cam/alg.jpg",
         integer_digits=4,
@@ -24,7 +24,7 @@ def gas() -> Meter:
 
 @pytest.fixture
 def settings(gas) -> Settings:
-    return Settings(openrouter_api_key="k", models=("m/x", "m/y"), meters=(gas,), mqtt_host="")
+    return Settings(llm_api_key="k", models=("m/x", "m/y"), meters=(gas,), mqtt_host="")
 
 
 @pytest.fixture

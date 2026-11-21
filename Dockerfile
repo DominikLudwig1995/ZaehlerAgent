@@ -8,11 +8,13 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY app app
-COPY config config
+COPY config/config.example.yml config/config.example.yml
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Never run as root.
-RUN useradd --system --create-home --uid 10001 app
+RUN useradd --system --create-home --uid 10001 app && mkdir /data && chown app /data
+ENV DATA_DIR=/data
+VOLUME /data
 USER app
 
 EXPOSE 8000
