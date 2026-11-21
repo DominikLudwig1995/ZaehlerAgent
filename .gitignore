@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.DS_Store
+.coverage
+.pytest_cache/
+.ruff_cache/
+
+# Pictures and answers collected for the model comparison (python -m app.evaluate): not part of the repo.
+eval/

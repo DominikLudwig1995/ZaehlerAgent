@@ -1,0 +1,101 @@
+when:
+  # Push pipelines only on the default branch: Renovate branches are
+  # tested once, as a pull request, instead of twice (push + PR).
+  - event: push
+    branch: ${CI_REPO_DEFAULT_BRANCH}
+  - event: pull_request
+
+steps:
+  mojibake:
+    image: python:3.15-slim
+    commands:
+      - python3 scripts/check_mojibake.py
+
+  backend:
+    image: homelab/ci-python:3.15
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends curl
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="/root/.local/bin:$PATH"
+      - uv sync --frozen
+      - uv run ruff check .
+      - uv run ruff format --check .
+      - uv run pytest
+
+  # Shows vulnerabilities in the log without stopping the pipeline. Remove
+  # `failure: ignore` once the findings are dealt with.
+  audit-python:
+    image: python:3.15-slim
+    failure: ignore
+    commands:
+      - pip install --quiet --no-cache-dir uv pip-audit
+      - uv export --frozen --no-dev --no-hashes -o /tmp/requirements.txt
+      - pip-audit -r /tmp/requirements.txt --no-deps --disable-pip
+
+  # Container image: validated on PRs, pushed to Harbor from main.
+  image-check:
+    image: woodpeckerci/plugin-kaniko:2.3.3
+    settings:
+      dry-run: true
+      registry: registry.example.com
+      repo: homelab/zaehler-agent
+      dockerfile: Dockerfile
+      context: .
+    when:
+      - event: pull_request
+        path:
+          exclude: ["**/*.md", "*.md", "LICENSE*", "docs/**"]
+
+  image:
+    image: woodpeckerci/plugin-kaniko:2.3.3
+    settings:
+      registry: registry.example.com
+      repo: homelab/zaehler-agent
+      dockerfile: Dockerfile
+      context: .
+      tags:
+        - ${CI_COMMIT_SHA:0:8}
+      username:
+        from_secret: harbor_username
+      password:
+        from_secret: harbor_password
+      cache: true
+      cache-repo: homelab/zaehler-agent-cache
+    when:
+      - event: [push, manual]
+        branch: ${CI_REPO_DEFAULT_BRANCH}
+        path:
+          exclude: ["**/*.md", "*.md", "LICENSE*", "docs/**"]
+
+  # Deploy to Nomad (deploy/nomad.hcl) and wait for the deployment; a failed one reverts itself.
+  deploy:
+    image: homelab/ci-alpine:3.24
+    environment:
+      NOMAD_ADDR: http://192.0.2.30:4646
+      NOMAD_TOKEN:
+        from_secret: nomad_token
+    commands:
+      - apk add --no-cache curl jq >/dev/null
+      - IMAGE="registry.example.com/homelab/zaehler-agent:$(printf '%s' "$CI_COMMIT_SHA" | cut -c1-8)"
+      - sh deploy/nomad-deploy.sh deploy/nomad.hcl "$IMAGE"
+    when:
+      - event: [push, manual]
+        branch: ${CI_REPO_DEFAULT_BRANCH}
+
+  notify:
+    image: homelab/ci-alpine:3.24
+    commands:
+      - apk add --no-cache curl
+      - |
+        curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+          --data-urlencode "text=CI failed: $CI_REPO_NAME #$CI_PIPELINE_NUMBER ($CI_COMMIT_BRANCH, $CI_COMMIT_AUTHOR) - $CI_PIPELINE_FORGE_URL"
+    environment:
+      TELEGRAM_BOT_TOKEN:
+        from_secret: telegram_bot_token
+      TELEGRAM_CHAT_ID:
+        from_secret: telegram_chat_id
+    # Push only: PR pipelines (Renovate) do not get this secret.
+    when:
+      - status: [failure]
+        event: push

@@ -1,0 +1,25 @@
+# The two AI-on-the-edge cameras (ESP32-CAM). image_url is the picture the camera has already rotated and aligned
+# to its reference image, so the digit row is always in the same place: crop is [x0, y0, x1, y1] in that picture.
+# max_rate_per_hour (m3/h) is the most the counter can plausibly advance; a reading above it is thrown away.
+# initial_value is only used until the first value is stored in MQTT (retained), then the stored one wins.
+meters:
+  - name: gas
+    title: Gaszähler
+    kind: gas
+    image_url: http://192.0.2.10/img_tmp/alg.jpg
+    device_json_url: http://192.0.2.10/json
+    integer_digits: 4
+    decimals: 3
+    crop: [10, 15, 640, 130]
+    max_rate_per_hour: 4.0
+    initial_value: 3592.35
+  - name: wasser
+    title: Wasserzähler
+    kind: water
+    image_url: http://192.0.2.11/img_tmp/raw.jpg   # raw: the aligned picture cuts off the last wheel
+    device_json_url: http://192.0.2.11/json
+    integer_digits: 5
+    decimals: 3
+    crop: [60, 0, 640, 200]
+    max_rate_per_hour: 1.5
+    initial_value: 150.2
