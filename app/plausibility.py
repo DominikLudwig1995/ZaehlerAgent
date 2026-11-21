@@ -32,12 +32,16 @@ class Decision:
     reason: str = ""
 
 
-def vote(samples: list[str]) -> tuple[str, float]:
-    """Majority per wheel over several reads. "?" does not vote. Returns (digits, agreement 0..1)."""
+def vote(samples: list[str]) -> tuple[str, float, dict[int, str]]:
+    """Majority per wheel over several reads. "?" does not vote.
+
+    Returns (digits, agreement 0..1, alternatives). A wheel the models disagree on gets "?" in digits; alternatives
+    maps its position to the digits that were actually read there, so a gap is only filled with what a model saw.
+    """
     if not samples:
         raise ValueError("no samples")
-    out, agreed = [], 0
-    for position in zip(*samples, strict=True):
+    out, agreed, alternatives = [], 0, {}
+    for i, position in enumerate(zip(*samples, strict=True)):
         counts = Counter(c for c in position if c != "?")
         if not counts:
             out.append("?")
@@ -45,24 +49,46 @@ def vote(samples: list[str]) -> tuple[str, float]:
         (digit, n), *rest = counts.most_common()
         if rest and rest[0][1] == n:  # tie: do not guess
             out.append("?")
+            alternatives[i] = "".join(sorted(d for d, k in counts.items() if k == n))
             continue
         out.append(digit)
         if n * 2 > len(position):
             agreed += 1
-    return "".join(out), agreed / len(out)
+    return "".join(out), agreed / len(out), alternatives
 
 
 def _to_value(digits: str, decimals: int) -> float:
     return int(digits) / 10**decimals
 
 
-def _complete(digits: str, meter: Meter, low: float, high: float) -> float | None:
-    """Fill the "?" wheels so that the value lies in [low, high]; the smallest such value, or None."""
+def _complete(
+    digits: str, meter: Meter, low: float, high: float, alternatives: dict[int, str] | None = None
+) -> float | None:
+    """Fill the "?" wheels so that the value lies in [low, high]; the smallest such value, or None.
+
+    A wheel with read alternatives only tries those digits; if nothing fits, every digit is tried.
+    """
     unknown = [i for i, c in enumerate(digits) if c == "?"]
     if len(unknown) > MAX_UNKNOWN_WHEELS:
         return None
+    if alternatives and any(i in alternatives for i in unknown):
+        narrowed = _search(digits, meter, low, high, unknown, alternatives)
+        if narrowed is not None:
+            return narrowed
+    return _search(digits, meter, low, high, unknown, {})
+
+
+def _search(
+    digits: str,
+    meter: Meter,
+    low: float,
+    high: float,
+    unknown: list[int],
+    alternatives: dict[int, str],
+) -> float | None:
     best = None
-    for combo in itertools.product("0123456789", repeat=len(unknown)):
+    pools = [alternatives.get(i, "0123456789") for i in unknown]
+    for combo in itertools.product(*pools):
         chars = list(digits)
         for i, c in zip(unknown, combo, strict=True):
             chars[i] = c
@@ -72,7 +98,13 @@ def _complete(digits: str, meter: Meter, low: float, high: float) -> float | Non
     return best
 
 
-def decide(meter: Meter, digits: str, last: Reading | None, now: datetime) -> Decision:
+def decide(
+    meter: Meter,
+    digits: str,
+    last: Reading | None,
+    now: datetime,
+    alternatives: dict[int, str] | None = None,
+) -> Decision:
     """Judge one (voted) digit string against the last accepted reading."""
     if len(digits) != meter.digits:
         return Decision(
@@ -92,7 +124,7 @@ def decide(meter: Meter, digits: str, last: Reading | None, now: datetime) -> De
     high = last.value + meter.max_rate_per_hour * hours + 5 * resolution
 
     if "?" in digits:
-        value = _complete(digits, meter, max(low, last.value), high)
+        value = _complete(digits, meter, max(low, last.value), high, alternatives)
         if value is None:
             return Decision("rejected", last.value, "unreadable wheels do not fit the last value")
     else:

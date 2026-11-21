@@ -110,8 +110,8 @@ class MeterService:
         if not good:
             return self._fail(meter, "model failed", "; ".join(str(x)[:80] for x in results))
         st.image_hash = digest
-        digits, agreement = vote([x.digits for x in good])
-        decision = decide(meter, digits, st.last, now)
+        digits, agreement, alternatives = vote([x.digits for x in good])
+        decision = decide(meter, digits, st.last, now, alternatives)
         if decision.status == "accepted" and decision.value is not None:
             st.last = Reading(decision.value, now)
         st.status = decision.status

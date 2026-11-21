@@ -12,7 +12,7 @@ meters:
     decimals: 3
     crop: [10, 15, 640, 130]
     max_rate_per_hour: 4.0
-    initial_value: 3592.35
+    initial_value: 3598.66
   - name: wasser
     title: Wasserzähler
     kind: water
@@ -22,4 +22,4 @@ meters:
     decimals: 3
     crop: [60, 0, 640, 200]
     max_rate_per_hour: 1.5
-    initial_value: 150.2
+    initial_value: 150.21

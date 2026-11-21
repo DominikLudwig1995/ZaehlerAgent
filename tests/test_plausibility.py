@@ -4,10 +4,14 @@ from app.plausibility import Reading, decide, vote
 
 
 def test_vote_majority_and_unknown():
-    assert vote(["3592352", "3592352", "3592357"]) == ("3592352", 1.0)
-    digits, agreement = vote(["35?2352", "3592352"])
+    assert vote(["3592352", "3592352", "3592357"]) == ("3592352", 1.0, {})
+    digits, agreement, _ = vote(["35?2352", "3592352"])
     assert digits == "3592352" and agreement == 6 / 7  # one wheel only has a single vote
-    assert vote(["3", "4"])[0] == "?"  # a tie is not guessed
+    digits, _, alternatives = vote(["3598661", "3598651"])
+    assert digits == "35986?1" and alternatives == {
+        5: "56"
+    }  # a tie is not guessed, the read digits are kept
+    assert vote(["3", "4"])[0] == "?"
     assert vote(["?", "?"])[0] == "?"
 
 
@@ -41,3 +45,13 @@ def test_unknown_wheels_are_completed_from_the_last_value(gas, now):
 def test_window_grows_with_the_time_since_the_last_value(gas, now):
     last = Reading(3592.0, now - timedelta(hours=10))
     assert decide(gas, "3600000", last, now).status == "accepted"  # 8 m3 in 10 h is fine at 4 m3/h
+
+
+def test_a_tie_is_resolved_among_the_digits_the_models_read(gas, now):
+    last = Reading(3598.6, now - timedelta(minutes=30))
+    # models read ...6 and ...5 on the sixth wheel; the smallest read digit that fits is 5, not the blind 0
+    d = decide(gas, "35986?1", last, now, {5: "56"})
+    assert d.status == "accepted" and d.value == 3598.651
+    # none of the read digits fits (last value is already past them): fall back to any digit
+    far = Reading(3598.66, now - timedelta(minutes=30))
+    assert decide(gas, "35986?1", far, now, {5: "01"}).value == 3598.661
