@@ -266,11 +266,13 @@ class MeterService:
         st = self.state[meter.name]
         st.last = Reading(value, datetime.now(UTC))
         st.status = "accepted"
-        st.detail = {"status": "accepted", "reason": "set by hand", "digits": ""}
+        detail = {"status": "accepted", "reason": "set by hand", "digits": ""}
+        st.detail = detail
         self._record(meter, st, 0.0)
         if self.publisher is not None:
-            publish_reading(self.publisher, self.settings, meter, value, st.detail)
-        return self.snapshot()[meter.name]
+            publish_reading(self.publisher, self.settings, meter, value, detail)
+        # built from what was set, not read back: the polling loop may already have moved on
+        return {"value": value, "at": st.last.at.isoformat(), **detail}
 
     def _record(self, meter: Meter, st: MeterState, cost: float) -> None:
         d, name = st.detail, meter.name
