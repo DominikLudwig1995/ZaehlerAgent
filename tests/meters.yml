@@ -1,0 +1,17 @@
+meters:
+  - name: gas
+    title: Gas meter
+    kind: gas
+    image_url: http://cam-gas/img_tmp/alg.jpg
+    integer_digits: 4
+    decimals: 3
+    crop: [10, 15, 640, 130]
+    max_rate_per_hour: 4.0
+  - name: wasser
+    title: Water meter
+    kind: water
+    image_url: http://cam-water/img_tmp/raw.jpg
+    integer_digits: 5
+    decimals: 3
+    crop: [60, 0, 640, 200]
+    max_rate_per_hour: 1.5

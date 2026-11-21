@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 
 from app.config import Meter, Settings
+from app.metrics import Metrics
 from app.mqtt_ha import (
     Publisher,
     attributes_topic,
@@ -21,7 +22,8 @@ from app.mqtt_ha import (
     state_topic,
 )
 from app.plausibility import Decision, Reading, decide, vote
-from app.vision import VisionClient, VisionError
+from app.storage import History
+from app.vision import VisionClient, VisionError, prepare_image
 
 log = logging.getLogger("zaehler")
 
@@ -32,6 +34,8 @@ class MeterState:
     image_hash: str = ""
     status: str = "starting"
     detail: dict = field(default_factory=dict)
+    image: bytes = b""  # last raw picture from the camera
+    crop_image: bytes = b""  # what the models saw
 
 
 class MeterService:
@@ -41,7 +45,11 @@ class MeterService:
         vision: VisionClient,
         publisher: Publisher | None,
         http: httpx.AsyncClient | None = None,
+        history: History | None = None,
+        metrics: Metrics | None = None,
     ) -> None:
+        self.history = history or History(settings.data_dir, settings.history_days)
+        self.metrics = metrics or Metrics()
         self.settings = settings
         self.vision = vision
         self.publisher = publisher
@@ -49,6 +57,8 @@ class MeterService:
         self.state = {m.name: MeterState() for m in settings.meters}
         self._spent = 0.0
         self._spent_day = datetime.now(UTC).date()
+        midnight = datetime.combine(self._spent_day, datetime.min.time(), UTC).timestamp()
+        self._spent = self.history.cost_since(midnight)  # a restart must not reset the daily budget
 
     # -- start ----------------------------------------------------------------------------------
     def restore(self) -> None:
@@ -91,7 +101,7 @@ class MeterService:
         st = self.state[meter.name]
         now = datetime.now(UTC)
         try:
-            r = await self.http.get(meter.image_url)
+            r = await self.http.get(meter.image_url, headers=meter.image_headers)
             r.raise_for_status()
         except httpx.HTTPError as exc:
             return self._fail(meter, "camera unreachable", str(exc)[:120])
@@ -99,16 +109,27 @@ class MeterService:
         if digest == st.image_hash and not force:
             return None  # the camera has not taken a new picture since the last poll
         if not self._budget_left():
+            self.metrics.set("zaehler_budget_exhausted", 1)
             return self._fail(meter, "daily budget used up", "")
+        self.metrics.set("zaehler_budget_exhausted", 0)
+        st.image = r.content
+        try:
+            st.crop_image = prepare_image(r.content, meter.crop, meter.rotate, meter.mirror)
+        except Exception:  # noqa: BLE001 -- a broken picture is reported by the model call
+            st.crop_image = b""
 
         results = await asyncio.gather(
             *(self.vision.read(r.content, meter, model=m) for m in self.settings.models),
             return_exceptions=True,
         )
         good = [x for x in results if not isinstance(x, BaseException)]
-        self._spent += sum(x.cost_usd for x in good)
+        cost = sum(x.cost_usd for x in good)
+        self._spent += cost
+        for m, x in zip(self.settings.models, results, strict=False):
+            if isinstance(x, BaseException):
+                self.metrics.inc("zaehler_model_errors_total", model=m)
         if not good:
-            return self._fail(meter, "model failed", "; ".join(str(x)[:80] for x in results))
+            return self._fail(meter, "model failed", "; ".join(str(x)[:80] for x in results), cost)
         st.image_hash = digest
         digits, agreement, alternatives = vote([x.digits for x in good])
         decision = decide(meter, digits, st.last, now, alternatives)
@@ -126,6 +147,7 @@ class MeterService:
             "device_reading": await self._device_reading(meter),
             "cost_today_usd": round(self._spent, 4),
         }
+        self._record(meter, st, cost)
         if self.publisher is not None:
             publish_reading(
                 self.publisher, self.settings, meter, st.last.value if st.last else None, st.detail
@@ -133,10 +155,31 @@ class MeterService:
         log.info("%s: %s %s (%s)", meter.name, decision.status, digits, decision.reason)
         return decision
 
-    def _fail(self, meter: Meter, reason: str, detail: str) -> None:
+    def _record(self, meter: Meter, st: MeterState, cost: float) -> None:
+        d, name = st.detail, meter.name
+        self.history.add(name, d, st.last.value if st.last else None, cost)
+        self.metrics.inc("zaehler_readings_total", meter=name, status=st.status)
+        self.metrics.set(
+            "zaehler_last_poll_timestamp_seconds", datetime.now(UTC).timestamp(), meter=name
+        )
+        if st.last:
+            self.metrics.set("zaehler_value", st.last.value, meter=name)
+        if st.status == "accepted":
+            self.metrics.set(
+                "zaehler_last_accepted_timestamp_seconds", datetime.now(UTC).timestamp(), meter=name
+            )
+        if "agreement" in d:
+            self.metrics.set("zaehler_agreement", d["agreement"], meter=name)
+        self.metrics.set("zaehler_cost_usd_today", self._spent)
+        self.metrics.set("zaehler_mqtt_connected", 1 if self.publisher is not None else 0)
+
+    def _fail(self, meter: Meter, reason: str, detail: str, cost: float = 0.0) -> None:
         st = self.state[meter.name]
         st.status = "error"
         st.detail = {"status": "error", "reason": reason, "detail": detail}
+        if reason == "camera unreachable":
+            self.metrics.inc("zaehler_camera_errors_total", meter=meter.name)
+        self._record(meter, st, cost)
         log.warning("%s: %s %s", meter.name, reason, detail)
         if self.publisher is not None:
             publish_reading(

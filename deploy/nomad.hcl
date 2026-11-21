@@ -77,13 +77,49 @@ job "zaehler-agent" {
         destination = "secrets/zaehler.env"
         env         = true
         data        = <<-EOT
-          {{ with secret "secret/data/nomad/zaehler-agent" }}OPENROUTER_API_KEY={{ .Data.data.openrouter_api_key | toJSON }}
+          {{ with secret "secret/data/nomad/zaehler-agent" }}LLM_API_KEY={{ .Data.data.openrouter_api_key | toJSON }}
           MQTT_USER={{ .Data.data.mqtt_user | toJSON }}
           MQTT_PASSWORD={{ .Data.data.mqtt_password | toJSON }}{{ end }}
         EOT
       }
 
+      # The homelab meters (camera addresses, crops): the config of this installation, inline.
+      template {
+        destination = "local/config.yml"
+        data        = <<-EOT
+          # Homelab configuration (rendered into the Nomad job). Other people: start from config/config.example.yml.
+          mqtt:
+            topic_prefix: zaehler-agent
+          # The two AI-on-the-edge cameras (ESP32-CAM). image_url is the picture the camera has already rotated and aligned
+          # to its reference image, so the digit row is always in the same place: crop is [x0, y0, x1, y1] in that picture.
+          # max_rate_per_hour (m3/h) is the most the counter can plausibly advance; a reading above it is thrown away.
+          # initial_value is only used until the first value is stored in MQTT (retained), then the stored one wins.
+          meters:
+            - name: gas
+              title: Gaszähler
+              kind: gas
+              image_url: http://192.0.2.10/img_tmp/alg.jpg
+              device_json_url: http://192.0.2.10/json
+              integer_digits: 4
+              decimals: 3
+              crop: [10, 15, 640, 130]
+              max_rate_per_hour: 4.0
+              initial_value: 3598.66
+            - name: wasser
+              title: Wasserzähler
+              kind: water
+              image_url: http://192.0.2.11/img_tmp/raw.jpg   # raw: the aligned picture cuts off the last wheel
+              device_json_url: http://192.0.2.11/json
+              integer_digits: 5
+              decimals: 3
+              crop: [60, 0, 640, 200]
+              max_rate_per_hour: 1.5
+              initial_value: 150.21
+        EOT
+      }
+
       env {
+        CONFIG_FILE      = "/local/config.yml"
         MQTT_HOST        = "192.0.2.20"
         INTERVAL_SECONDS = "1800"
         MODELS           = "openai/gpt-4o-mini,qwen/qwen3-vl-30b-a3b-instruct"

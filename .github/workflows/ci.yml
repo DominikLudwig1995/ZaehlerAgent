@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.14
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+      - run: uv export --frozen --no-dev --no-hashes -o /tmp/requirements.txt && uvx pip-audit -r /tmp/requirements.txt --no-deps --disable-pip
+
+  compose:
+    name: docker compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack from the example config
+        run: |
+          cp config/config.example.yml config/config.yml
+          cp .env.example .env
+          docker compose up -d --build
+      - name: UI, API and metrics answer
+        run: |
+          for i in $(seq 1 30); do curl -fs localhost:8000/healthz && break; sleep 2; done
+          curl -fs localhost:8000/ | grep -q zaehler-agent
+          curl -fs localhost:8000/api/config | grep -q '"meters"'
+          curl -fs localhost:8000/metrics | grep -q '^zaehler_up 1'
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t zaehler-agent:ci .
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: zaehler-agent:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
