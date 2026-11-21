@@ -5,59 +5,149 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>zaehler-agent</title>
 <style>
-:root{--bg:#f6f7f9;--fg:#1c2330;--card:#fff;--mut:#667085;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--line:#e4e7ec;--acc:#2563eb}
-@media (prefers-color-scheme:dark){:root{--bg:#0f141b;--fg:#e6e9ef;--card:#182029;--mut:#98a2b3;--line:#2a3441;--acc:#6aa0ff}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif}
-header{padding:14px 16px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
-h1{font-size:18px;margin:0}.mut{color:var(--mut);font-size:13px}
-main{display:grid;gap:14px;padding:0 16px 24px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
-.val{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}
-.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;color:#fff;background:var(--mut)}
-.accepted,.unchanged{background:var(--ok)}.rejected{background:var(--warn)}.error{background:var(--bad)}
-img{max-width:100%;border-radius:6px;border:1px solid var(--line);margin-top:8px}
-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-td,th{text-align:left;padding:3px 4px;border-bottom:1px solid var(--line)}
-button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
-svg{width:100%;height:70px;margin-top:6px}
+:root{
+  --bg:#f3f5f8;--card:#fff;--fg:#141a26;--mut:#6b7587;--line:#e3e7ee;--soft:#f0f3f8;
+  --acc:#2f6bff;--ok:#12a150;--warn:#d98a00;--bad:#d9362b;--shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.05);
+  --gas:#e8863a;--water:#2f9bff;--electricity:#c9a400;--heat:#d9362b;--generic:#7a63ff;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d1117;--card:#161c26;--fg:#e8ecf3;--mut:#8b96a9;--line:#263041;--soft:#1d2531;
+  --acc:#6b9bff;--ok:#2fc272;--warn:#f0a928;--bad:#ff6a5e;--shadow:none}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:0 16px 40px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:18px 0}
+header h1{font-size:19px;margin:0;letter-spacing:-.01em}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:4px 11px;font-size:12.5px;color:var(--mut)}
+.chip b{color:var(--fg);font-weight:600}
+.bar{height:6px;border-radius:3px;background:var(--soft);overflow:hidden;width:70px;display:inline-block;vertical-align:middle;margin-left:6px}
+.bar i{display:block;height:100%;background:var(--acc)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.top{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 6px}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:7px;background:var(--accent,var(--acc))}
+.title{color:var(--mut);font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+.val{font-size:40px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.unit{font-size:18px;color:var(--mut);font-weight:500;margin-left:6px}
+.status{margin-left:auto;text-align:right}
+.pill{display:inline-block;padding:3px 11px;border-radius:99px;font-size:12.5px;font-weight:600;color:#fff;background:var(--mut)}
+.pill.accepted{background:var(--ok)}.pill.unchanged{background:#6aa6ff}.pill.rejected{background:var(--warn)}.pill.error{background:var(--bad)}
+.age{color:var(--mut);font-size:12.5px;margin-top:6px}
+.reason{padding:0 20px;color:var(--mut);font-size:13px;min-height:20px}
+.reads{display:flex;gap:8px;flex-wrap:wrap;padding:10px 20px 0}
+.read{background:var(--soft);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--mut)}
+.read code{display:block;font-size:15px;color:var(--fg);letter-spacing:.14em;font-weight:600}
+.read.cam code{opacity:.65}
+.chart{padding:8px 12px 0;position:relative}
+.chart svg{width:100%;height:120px;display:block}
+.chart .empty{height:120px;display:grid;place-items:center;color:var(--mut);font-size:13px}
+.pics{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 20px 0}
+.pics figure{margin:0}
+.pics img{width:100%;border-radius:8px;border:1px solid var(--line);background:var(--soft);display:block;cursor:zoom-in;min-height:40px;object-fit:contain;max-height:200px}
+.pics figcaption{font-size:11.5px;color:var(--mut);margin-top:4px}
+.actions{display:flex;gap:8px;padding:14px 20px;flex-wrap:wrap;align-items:center}
+button{font:inherit;font-size:13.5px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:7px 13px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.55;cursor:wait}
+.msg{font-size:12.5px;color:var(--mut)}
+details{border-top:1px solid var(--line)}
+summary{cursor:pointer;padding:11px 20px;color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--mut);font-weight:500;text-align:left;padding:5px 20px}
+td{padding:6px 20px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+td.n{text-align:right}
+.dlg{position:fixed;inset:0;background:rgba(10,14,22,.72);display:none;place-items:center;z-index:9;padding:20px}
+.dlg.on{display:grid}.dlg img{max-width:100%;max-height:92vh;border-radius:8px}
+.set{display:none;gap:8px;align-items:center;padding:0 20px 14px}
+.set.on{display:flex}.set input{font:inherit;width:140px;padding:6px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+@media (max-width:520px){.val{font-size:32px}.pics{grid-template-columns:1fr}.chips{margin-left:0}}
 </style>
 </head>
 <body>
-<header><h1>zaehler-agent</h1><span class="mut" id="info"></span></header>
-<main id="meters"></main>
+<div class="wrap">
+  <header><h1>zaehler-agent</h1><div class="chips" id="chips"></div></header>
+  <div class="grid" id="meters"></div>
+</div>
+<div class="dlg" id="dlg"><img id="big" alt=""></div>
 <script>
+const COLORS={gas:"--gas",water:"--water",electricity:"--electricity",heat:"--heat",generic:"--generic"};
 const $=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!==undefined)e.textContent=h;return e};
-const ago=ts=>{const s=Math.round(Date.now()/1000-ts);return s<90?s+" s":s<5400?Math.round(s/60)+" min":Math.round(s/3600)+" h"};
-function spark(series){
-  const ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 300 70");
-  if(series.length<2)return svg;
-  const xs=series.map(p=>p[0]),ys=series.map(p=>p[1]);
-  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys)||1;
-  const pts=series.map(p=>((p[0]-x0)/((x1-x0)||1)*296+2)+","+(66-(p[1]-y0)/((y1-y0)||1)*62)).join(" ");
-  const l=document.createElementNS(ns,"polyline");l.setAttribute("points",pts);l.setAttribute("fill","none");
-  l.setAttribute("stroke","currentColor");l.setAttribute("stroke-width","2");svg.append(l);return svg}
+const ago=(ts)=>{const s=Math.max(0,Math.round(Date.now()/1000-ts));return s<90?s+" s ago":s<5400?Math.round(s/60)+" min ago":s<172800?Math.round(s/3600)+" h ago":Math.round(s/86400)+" d ago"};
+const fmt=(v,d)=>v==null?"-":Number(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}).replace(/,/g," ");
+const NS="http://www.w3.org/2000/svg";
+const sv=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e};
+function chart(series,decimals){
+  const box=$("div","chart");
+  if(series.length<2){box.append($("div","empty","The curve appears after a few readings"));return box}
+  const W=560,H=120,L=8,R=8,T=10,B=22,xs=series.map(p=>p[0]),ys=series.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs);let y0=Math.min(...ys),y1=Math.max(...ys);
+  if(y1-y0<1e-9){y0-=.5;y1+=.5}
+  const X=x=>L+(x-x0)/((x1-x0)||1)*(W-L-R),Y=y=>T+(1-(y-y0)/(y1-y0))*(H-T-B);
+  const s=sv("svg",{viewBox:`0 0 ${W} ${H}`,preserveAspectRatio:"none"});
+  s.style.color="var(--accent)";
+  const pts=series.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1));
+  const area=sv("polygon",{points:`${X(x0)},${H-B} ${pts.join(" ")} ${X(x1)},${H-B}`,fill:"currentColor","fill-opacity":".12"});
+  const line=sv("polyline",{points:pts.join(" "),fill:"none",stroke:"currentColor","stroke-width":2.2,"stroke-linejoin":"round","vector-effect":"non-scaling-stroke"});
+  s.append(area,line);
+  const mk=(txt,x,anchor)=>{const t=sv("text",{x,y:H-6,"text-anchor":anchor,"font-size":11,fill:"var(--mut)"});t.textContent=txt;return t};
+  const hh=x=>new Date(x*1000).toLocaleString([], {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  s.append(mk(hh(x0),L,"start"),mk(fmt(y0,decimals)+" - "+fmt(y1,decimals),W/2,"middle"),mk(hh(x1),W-R,"end"));
+  box.append(s);return box}
+function digits(label,txt,cls){const r=$("div","read"+(cls?" "+cls:""));r.append(document.createTextNode(label));r.append($("code","",txt||"-"));return r}
+async function api(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(r.status);return r.json()}
+function card(m,s,h){
+  const c=$("section","card");c.style.setProperty("--accent",`var(${COLORS[m.kind]||"--acc"})`);
+  const top=$("div","top");top.append($("span","dot"));
+  const left=$("div");left.append($("div","title",m.title));
+  const v=$("div","val",fmt(s.value,m.decimals));v.append($("span","unit",m.unit));left.append(v);top.append(left);
+  const st=$("div","status");st.append($("span","pill "+(s.status||""),s.status||"starting"));
+  const upd=h.readings.length?ago(h.readings[0].ts):"no reading yet";st.append($("div","age","last reading "+upd));top.append(st);c.append(top);
+  c.append($("div","reason",s.reason||""));
+  const rd=$("div","reads");
+  rd.append(digits("voted",s.digits));
+  (s.samples||[]).forEach((x,i)=>rd.append(digits((s.models||[])[i]?s.models[i].split("/").pop():"model "+(i+1),x)));
+  if(s.device_reading)rd.append(digits("camera's own",s.device_reading,"cam"));
+  c.append(rd);
+  c.append(chart(h.series,m.decimals));
+  const pics=$("div","pics");
+  for(const [crop,cap] of [[false,"camera picture"],[true,"what the models see"]]){
+    const f=$("figure"),i=$("img");i.alt=cap;i.src="api/image/"+m.name+"?crop="+crop+"&t="+Date.now();
+    i.onerror=()=>{f.style.display="none"};i.onclick=()=>{document.getElementById("big").src=i.src;document.getElementById("dlg").classList.add("on")};
+    f.append(i,$("figcaption","",cap));pics.append(f)}
+  c.append(pics);
+  const set=$("div","set"),inp=$("input");inp.type="number";inp.step="any";inp.placeholder=fmt(s.value,m.decimals);
+  const ok=$("button","primary","Set value");set.append(inp,ok,$("span","msg","what the counter really shows"));
+  const act=$("div","actions"),msg=$("span","msg");
+  const rb=$("button","primary","Read now"),sb=$("button","","Set value by hand...");
+  rb.onclick=async()=>{rb.disabled=true;msg.textContent="reading (two models)...";try{await api("poll/"+m.name,{method:"POST"});await render()}catch(e){msg.textContent="failed: "+e.message;rb.disabled=false}};
+  sb.onclick=()=>{set.classList.toggle("on");inp.focus()};
+  ok.onclick=async()=>{const x=parseFloat(inp.value);if(isNaN(x))return;if(!confirm("Set "+m.title+" to "+x+" "+m.unit+"?"))return;
+    try{await api("api/meters/"+m.name+"/value",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:x})});await render()}catch(e){msg.textContent="failed: "+e.message}};
+  act.append(rb,sb,msg);c.append(act,set);
+  const det=$("details");det.append($("summary","","History ("+h.readings.length+" latest readings)"));
+  const t=$("table"),hr=$("tr");["when","result","digits / reason","cost USD"].forEach(x=>hr.append($("th","",x)));t.append(hr);
+  for(const r of h.readings){const tr=$("tr");[ago(r.ts),r.status,r.digits||r.reason||"-"].forEach(x=>tr.append($("td","",x)));tr.append($("td","n",r.cost.toFixed(4)));t.append(tr)}
+  det.append(t);c.append(det);return c}
+let busy=false;
 async function render(){
-  const [cfg,st]=await Promise.all([fetch("api/config").then(r=>r.json()),fetch("status").then(r=>r.json())]);
-  document.getElementById("info").textContent=`models: ${cfg.models.join(", ")} | every ${cfg.interval_seconds/60} min | `+
-    `cost today ${cfg.cost_today_usd} / ${cfg.max_daily_cost_usd} USD | MQTT ${cfg.mqtt?"on":"off"}`;
-  const root=document.getElementById("meters");root.replaceChildren();
-  for(const m of cfg.meters){
-    const s=st[m.name]||{},h=await fetch("api/history/"+m.name+"?limit=10").then(r=>r.json());
-    const c=$("section","card");
-    c.append($("div","mut",m.title));
-    c.append($("div","val",s.value==null?"-":s.value.toFixed(m.decimals)+" "+m.unit));
-    const p=$("span","pill "+(s.status||""),s.status||"starting");c.append(p);
-    if(s.reason)c.append($("span","mut"," "+s.reason));
-    c.append($("div","mut",`digits ${s.digits||"-"} | models ${(s.samples||[]).join(" / ")||"-"} | camera ${s.device_reading||"-"}`));
-    c.append(spark(h.series));
-    for(const crop of [false,true]){const i=$("img");i.src="api/image/"+m.name+"?crop="+crop+"&t="+Date.now();i.alt=m.title;i.onerror=()=>i.remove();c.append(i)}
-    const t=$("table");t.append(Object.assign($("tr"),{innerHTML:"<th>ago</th><th>status</th><th>digits</th><th>USD</th>"}));
-    for(const r of h.readings){const tr=$("tr");[ago(r.ts),r.status,r.digits||r.reason,r.cost.toFixed(4)].forEach(x=>tr.append($("td","",x)));t.append(tr)}
-    c.append(t);
-    const b=$("button","","Read now");b.onclick=async()=>{b.disabled=true;await fetch("poll/"+m.name,{method:"POST"});render()};c.append(b);
-    root.append(c)}
-}
-render();setInterval(render,30000);
+  if(busy)return;busy=true;
+  try{
+    const [cfg,st]=await Promise.all([api("api/config"),api("status")]);
+    const chips=document.getElementById("chips");chips.replaceChildren();
+    const chip=(a,b)=>{const e=$("span","chip",a+" ");e.append($("b","",b));chips.append(e);return e};
+    chip("models",cfg.models.map(x=>x.split("/").pop()).join(", "));
+    chip("every",Math.round(cfg.interval_seconds/60)+" min");
+    const bud=chip("cost today",cfg.cost_today_usd.toFixed(3)+" / "+cfg.max_daily_cost_usd.toFixed(2)+" USD");
+    const bar=$("span","bar"),fill=$("i");fill.style.width=Math.min(100,cfg.cost_today_usd/cfg.max_daily_cost_usd*100)+"%";bar.append(fill);bud.append(bar);
+    chip("MQTT",cfg.mqtt?"on":"off");
+    const root=document.getElementById("meters");const cards=[];
+    for(const m of cfg.meters){const h=await api("api/history/"+m.name+"?limit=15");cards.push(card(m,st[m.name]||{},h))}
+    root.replaceChildren(...cards);
+  }catch(e){document.getElementById("meters").textContent="Cannot load: "+e.message}
+  busy=false}
+document.getElementById("dlg").onclick=e=>e.currentTarget.classList.remove("on");
+render();setInterval(()=>{if(!document.hidden&&!document.querySelector(".set.on")&&!document.querySelector("input:focus"))render()},30000);
 </script>
 </body>
 </html>

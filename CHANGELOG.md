@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.0] - 2026-11-21
+
+- New UI: large value, status, what each model read, curve with time axis, pictures with zoom, set-by-hand form,
+  cost bar, dark mode, mobile layout.
+
 ## [1.1.0] - 2026-11-21
 
 - `POST /api/meters/{name}/value`: set the counter by hand (start value, replaced counter).

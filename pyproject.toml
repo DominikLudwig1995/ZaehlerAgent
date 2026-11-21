@@ -1,6 +1,6 @@
 [project]
 name = "zaehler-agent"
-version = "1.1.0"
+version = "1.2.0"
 description = "Liest Gas- und Wasserzaehler per Vision-Modell (OpenRouter) von den AI-on-the-edge-Kameras und meldet die Werte per MQTT an Home Assistant"
 requires-python = ">=3.11"
 dependencies = [
