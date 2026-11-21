@@ -135,6 +135,19 @@ def image(name: str, crop: bool = False) -> Response:
     return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/live/{name}")
+async def live(name: str, light: bool = False) -> Response:
+    """A fresh picture from the camera right now; light=true switches its light on for the shot."""
+    if light:
+        writable()  # it switches something on
+    service, meter = _meter(name)
+    try:
+        data = await service.live(meter, light=light)
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"camera: {str(exc)[:120]}") from exc
+    return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.post("/poll/{name}")
 async def poll_now(name: str) -> dict:
     """Read one meter right now (also when the picture did not change)."""
@@ -285,5 +298,9 @@ async def probe(
 
 
 @app.get("/")
-def ui() -> FileResponse:
+@app.get("/settings")
+@app.get("/meters")
+@app.get("/meters/{name}")
+def ui(name: str = "") -> FileResponse:
+    """The UI is one page that shows the view of the address; every view has its own URL."""
     return FileResponse(STATIC / "index.html")

@@ -52,6 +52,7 @@ class MeterService:
     ) -> None:
         self.publisher_factory = publisher_factory
         self._wake = asyncio.Event()
+        self._live_locks: dict[str, asyncio.Lock] = {}
         self.history = history or History(settings.data_dir, settings.history_days)
         self.metrics = metrics or Metrics()
         self.settings = settings
@@ -138,6 +139,28 @@ class MeterService:
             self.publisher.publish(
                 f"{settings.discovery_prefix}/sensor/zaehler_agent_{name}/config", ""
             )
+
+    async def live(self, meter: Meter, *, light: bool = False) -> bytes:
+        """A fresh picture now. With light: switch the camera's light on, wait, take the picture, switch it off.
+        One at a time per camera (an ESP32 serves one request at a time)."""
+        lock = self._live_locks.setdefault(meter.name, asyncio.Lock())
+        async with lock:
+            use_light = light and bool(meter.light_on_url)
+            try:
+                if use_light:
+                    (
+                        await self.http.get(meter.light_on_url, headers=meter.image_headers)
+                    ).raise_for_status()
+                    await asyncio.sleep(meter.light_settle_seconds)
+                r = await self.http.get(
+                    meter.live_url or meter.image_url, headers=meter.image_headers
+                )
+                r.raise_for_status()
+                return r.content
+            finally:
+                if use_light and meter.light_off_url:
+                    with contextlib.suppress(httpx.HTTPError):
+                        await self.http.get(meter.light_off_url, headers=meter.image_headers)
 
     async def test_read(self, meter: Meter) -> dict:
         """One reading for the setup form: fetch, read with every model, vote. Nothing is stored or published."""
@@ -243,11 +266,13 @@ class MeterService:
         st = self.state[meter.name]
         st.last = Reading(value, datetime.now(UTC))
         st.status = "accepted"
-        st.detail = {"status": "accepted", "reason": "set by hand", "digits": ""}
+        detail = {"status": "accepted", "reason": "set by hand", "digits": ""}
+        st.detail = detail
         self._record(meter, st, 0.0)
         if self.publisher is not None:
-            publish_reading(self.publisher, self.settings, meter, value, st.detail)
-        return self.snapshot()[meter.name]
+            publish_reading(self.publisher, self.settings, meter, value, detail)
+        # built from what was set, not read back: the polling loop may already have moved on
+        return {"value": value, "at": st.last.at.isoformat(), **detail}
 
     def _record(self, meter: Meter, st: MeterState, cost: float) -> None:
         d, name = st.detail, meter.name
