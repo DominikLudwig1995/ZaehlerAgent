@@ -44,6 +44,7 @@ job "zaehler-agent" {
       name     = "zaehler-agent"
       provider = "consul"
       port     = "http"
+      tags     = ["prometheus-scrape"] # Prometheus finds /metrics through Consul
 
       check {
         type     = "http"
