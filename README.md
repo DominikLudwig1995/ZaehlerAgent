@@ -98,6 +98,7 @@ The last values are retained MQTT messages, so a restart continues where it stop
 | `GET /` | web UI: value, decision, the camera picture and the crop the models saw, history chart, "Read now" |
 | `GET /status`, `/api/config`, `/api/history/{name}`, `/api/image/{name}?crop=` | JSON and pictures |
 | `POST /poll/{name}` | read one meter now |
+| `POST /api/meters/{name}/value` | set the counter by hand: `{"value": 3600.34}` (start value, replaced counter) |
 | `GET /healthz` | liveness |
 | `GET /metrics` | Prometheus: `zaehler_value`, `zaehler_readings_total{status}`, `zaehler_last_accepted_timestamp_seconds`, `zaehler_model_errors_total`, `zaehler_camera_errors_total`, `zaehler_cost_usd_today`, `zaehler_budget_exhausted`, `zaehler_agreement` |
 

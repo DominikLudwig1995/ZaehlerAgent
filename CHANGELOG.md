@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.0] - 2026-11-21
+
+- `POST /api/meters/{name}/value`: set the counter by hand (start value, replaced counter).
+- Image: newer zlib, no pip/setuptools at runtime (Trivy findings).
+
 ## [1.0.0] - 2026-11-21
 
 First release.
