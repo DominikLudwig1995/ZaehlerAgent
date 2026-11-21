@@ -8,9 +8,9 @@ Reads mechanical meters (gas, water, electricity, heat: digit wheels) with visio
 
 ## Release notes
 
-**1.0.0** (2026-11-21): first release: multi-model voting, plausibility check, Home Assistant discovery, web UI, Prometheus metrics, history, docker compose. Full list: [CHANGELOG.md](CHANGELOG.md).
+**2.0.0** (2026-11-21): everything is configurable in the web UI, including adding and removing cameras/meters. 1.x: multi-model voting, plausibility check, Home Assistant discovery, Prometheus metrics, history, docker compose. Full list: [CHANGELOG.md](CHANGELOG.md).
 
-Two ESP32 cameras ([AI-on-the-edge-device](https://github.com/jomjol/AI-on-the-edge-device)) look at the digit
+Cameras (for example ESP32 with [AI-on-the-edge-device](https://github.com/jomjol/AI-on-the-edge-device)) look at the digit
 wheels. Their own small neural network reads them badly (blurry wheels, glare, a camera that sits a bit off).
 This agent takes the pictures the cameras already produce, lets two different vision models read the wheels
 through an OpenAI-compatible API (default [OpenRouter](https://openrouter.ai)), votes the digits wheel by wheel and only publishes a value that fits
@@ -57,19 +57,30 @@ LLM_API_KEY=... uv run python -m app.evaluate --dir eval --truth gas=3598,wasser
 
 ```bash
 git clone https://github.com/DominikLudwig1995/zaehler-agent && cd zaehler-agent
-cp config/config.example.yml config/config.yml   # camera URLs, number of wheels, crop of the digit row
-cp .env.example .env                              # LLM_API_KEY=...
-docker compose up -d                              # UI and API: http://localhost:8000
+docker compose up -d        # web UI: http://localhost:8000
 ```
 
-Works with any OpenAI-compatible vision API (OpenRouter, OpenAI, Ollama, vLLM: `vision.base_url`) and any camera that
-serves a picture by URL (ESP32-CAM with AI-on-the-edge, IP camera snapshot, Frigate ...). Without `mqtt.host` it runs
-with UI and metrics only; `docker compose --profile mqtt up -d` adds a local Mosquitto.
+Then do the setup in the UI, nothing to edit by hand:
 
-## Configuration
+1. **Settings**: API key (any OpenAI-compatible vision API: OpenRouter, OpenAI, a local Ollama/vLLM via the base URL),
+   the models, check interval, daily budget, and the MQTT broker of your Home Assistant.
+2. **Meters, Add meter**: the camera's picture URL, number of wheels, rise limit. Press *Load picture*, draw a
+   rectangle around the digit row, *Preview what the models see*, *Test read*, *Save*. The sensor shows up in
+   Home Assistant by itself (MQTT discovery).
 
-One YAML file (`config/config.yml`, see [config.example.yml](config/config.example.yml), every key explained). Secrets
-are never in the file: it names the variable (`api_key_env`, `password_env`). Environment variables override the file:
+Works with any camera that serves a picture by URL (ESP32-CAM with AI-on-the-edge, IP camera snapshot, Frigate ...).
+`docker compose --profile mqtt up -d` adds a local Mosquitto if you have no broker.
+
+Changes are stored in the `zaehler-data` volume (`settings.json`, mode 600, includes the key if you typed it in the
+UI) and win over the file and the environment. *Reset* goes back, *Download as config.yml* exports the setup without
+secrets. `READ_ONLY=true` turns every change off. The UI has no login of its own: put it behind your reverse proxy's
+authentication when it is reachable by others.
+
+## Configuration as a file (optional)
+
+For setups that live in git: `config/config.yml` (see [config.example.yml](config/config.example.yml), every key
+explained). Secrets are never in the file: it names the variable (`api_key_env`, `password_env`). Environment
+variables override the file; what you saved in the UI overrides both.
 
 | Variable | Default | |
 |----------|---------|-|
@@ -81,15 +92,17 @@ are never in the file: it names the variable (`api_key_env`, `password_env`). En
 | `MAX_DAILY_COST_USD` | `0.30` | when spent, no model is called until midnight UTC (survives restarts) |
 | `MQTT_HOST/PORT/USER/PASSWORD` | | without host nothing is published |
 | `TOPIC_PREFIX`, `DISCOVERY_PREFIX` | `zaehler-agent`, `homeassistant` | |
-| `DATA_DIR`, `HISTORY_DAYS` | empty, `30` | SQLite history; empty = memory only |
+| `DATA_DIR`, `HISTORY_DAYS` | `/data` in the image, `30` | SQLite history and `settings.json`; empty = memory only |
+| `READ_ONLY` | | `true` disables every change |
 
 Per meter: `name`, `title`, `kind` (gas, water, electricity, heat, generic: sets unit and Home Assistant class),
 `image_url` (+ `image_headers`), `integer_digits`, `decimals`, `crop`, `rotate`, `mirror`, `max_rate_per_hour`,
 `initial_value`, `device_json_url`.
 
-Home Assistant gets one `total_increasing` sensor per meter (MQTT discovery). Attributes show the decision
-(`accepted`, `unchanged`, `rejected`), the digits each model read, the camera's own reading and the cost of the day.
-The last values are retained MQTT messages, so a restart continues where it stopped.
+Home Assistant gets one `total_increasing` sensor per meter. Attributes show the decision (`accepted`, `unchanged`,
+`rejected`), the digits each model read, the camera's own reading and the cost of the day. The last values are
+retained MQTT messages, so a restart continues where it stopped. Wrong start value? `POST /api/meters/{name}/value`
+or the *Set value by hand* button.
 
 ## UI, API, metrics
 
@@ -98,6 +111,8 @@ The last values are retained MQTT messages, so a restart continues where it stop
 | `GET /` | web UI: value, decision, the camera picture and the crop the models saw, history chart, "Read now" |
 | `GET /status`, `/api/config`, `/api/history/{name}`, `/api/image/{name}?crop=` | JSON and pictures |
 | `POST /poll/{name}` | read one meter now |
+| `GET/PUT /api/settings`, `DELETE /api/settings`, `GET /api/settings/export` | the settings the UI edits |
+| `POST /api/meters`, `PUT/DELETE /api/meters/{name}`, `POST /api/meters/test`, `GET /api/probe` | meters: add, change, remove, try, camera preview |
 | `POST /api/meters/{name}/value` | set the counter by hand: `{"value": 3600.34}` (start value, replaced counter) |
 | `GET /healthz` | liveness |
 | `GET /metrics` | Prometheus: `zaehler_value`, `zaehler_readings_total{status}`, `zaehler_last_accepted_timestamp_seconds`, `zaehler_model_errors_total`, `zaehler_camera_errors_total`, `zaehler_cost_usd_today`, `zaehler_budget_exhausted`, `zaehler_agreement` |
@@ -123,4 +138,3 @@ It does not fix a bad picture. A smeared lens, glare or a camera that cuts off t
 accuracy: the agent then reports `rejected` or keeps the last value instead of publishing a guess. Fix the camera,
 then check `/status`.
 
-Created from `app-template`; template updates arrive with `uvx copier update`.

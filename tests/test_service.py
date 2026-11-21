@@ -5,7 +5,7 @@ import respx
 
 from app.mqtt_ha import attributes_topic, discovery_messages, state_topic
 from app.service import MeterService
-from app.vision import OPENROUTER_URL, VisionClient
+from app.vision import CHAT_URL, VisionClient
 
 
 class FakePublisher:
@@ -17,6 +17,9 @@ class FakePublisher:
 
     def retained(self, topic, timeout=3.0):
         return self.stored.get(topic)
+
+    def close(self):
+        pass
 
 
 def answer(digits):
@@ -41,7 +44,7 @@ async def test_poll_publishes_an_accepted_value(settings, gas, jpeg):
     respx.get(gas.device_json_url).mock(
         return_value=httpx.Response(200, json={"main": {"raw": "1508.633"}})
     )
-    respx.post(OPENROUTER_URL).mock(return_value=answer("3592360"))
+    respx.post(CHAT_URL).mock(return_value=answer("3592360"))
     pub = FakePublisher()
     svc = make(settings, pub)
     svc.restore()
@@ -60,7 +63,7 @@ async def test_poll_publishes_an_accepted_value(settings, gas, jpeg):
 async def test_implausible_reading_keeps_the_stored_value(settings, gas, jpeg):
     respx.get(gas.image_url).mock(return_value=httpx.Response(200, content=jpeg))
     respx.get(gas.device_json_url).mock(return_value=httpx.Response(404))
-    respx.post(OPENROUTER_URL).mock(return_value=answer("1508633"))
+    respx.post(CHAT_URL).mock(return_value=answer("1508633"))
     pub = FakePublisher(stored={state_topic(settings, gas): "3592.352"})
     svc = make(settings, pub)
     svc.restore()
@@ -76,7 +79,7 @@ async def test_camera_and_model_failures_are_reported_not_raised(settings, gas, 
     assert await svc.poll(gas) is None
     assert svc.snapshot()["gas"]["status"] == "error"
     respx.get(gas.image_url).mock(return_value=httpx.Response(200, content=jpeg))
-    respx.post(OPENROUTER_URL).mock(return_value=httpx.Response(500))
+    respx.post(CHAT_URL).mock(return_value=httpx.Response(500))
     assert await svc.poll(gas) is None
     assert "model failed" in svc.snapshot()["gas"]["reason"]
 
@@ -84,7 +87,7 @@ async def test_camera_and_model_failures_are_reported_not_raised(settings, gas, 
 @respx.mock
 async def test_daily_budget_stops_the_model_calls(settings, gas, jpeg):
     respx.get(gas.image_url).mock(return_value=httpx.Response(200, content=jpeg))
-    route = respx.post(OPENROUTER_URL).mock(return_value=answer("3592360"))
+    route = respx.post(CHAT_URL).mock(return_value=answer("3592360"))
     from dataclasses import replace
 
     svc = make(replace(settings, max_daily_cost_usd=0.0), FakePublisher())

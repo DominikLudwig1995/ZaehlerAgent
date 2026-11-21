@@ -17,6 +17,8 @@ class Publisher(Protocol):
 
     def retained(self, topic: str, timeout: float = 3.0) -> str | None: ...
 
+    def close(self) -> None: ...
+
 
 class MqttPublisher:
     """Thin paho wrapper: one connection with a last-will, publishes are retained."""

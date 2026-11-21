@@ -8,9 +8,10 @@ and Nomad do.
 
 from __future__ import annotations
 
+import json
 import os
 import re
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 import yaml
@@ -87,10 +88,6 @@ class Settings:
     config_file: str = "config/config.yml"
     meters: tuple[Meter, ...] = field(default_factory=tuple)
 
-    @property
-    def openrouter_api_key(self) -> str:  # the name used before the agent became generic
-        return self.llm_api_key
-
     @classmethod
     def load(cls, env: dict[str, str] | None = None) -> Settings:
         e = dict(os.environ if env is None else env)
@@ -108,7 +105,7 @@ class Settings:
         if isinstance(models, str):
             models = [m.strip() for m in models.split(",") if m.strip()]
         d = cls()
-        return cls(
+        settings = cls(
             llm_base_url=str(pick("LLM_BASE_URL", vision.get("base_url"), d.llm_base_url)),
             llm_api_key=e.get("LLM_API_KEY")
             or e.get(key_env, "")
@@ -133,8 +130,7 @@ class Settings:
             config_file=path,
             meters=tuple(_meter(m, e) for m in data.get("meters") or []),
         )
-
-    from_env = load  # the name of the first version
+        return with_runtime_overrides(settings)
 
 
 def _read_yaml(path: str) -> dict:
@@ -159,9 +155,165 @@ def _meter(item: dict, env: dict[str, str]) -> Meter:
     item["image_headers"] = {
         k: _expand(str(v), env) for k, v in (item.get("image_headers") or {}).items()
     }
-    return Meter(**item)
+    try:
+        return Meter(**item)
+    except TypeError as exc:  # a missing required setting
+        raise ValueError(f"meter {item.get('name')!r}: {exc}") from exc
 
 
 def load_meters(path: str) -> tuple[Meter, ...]:
     """The meters of a config file (the first version had a meters-only file)."""
     return tuple(_meter(m, dict(os.environ)) for m in _read_yaml(path).get("meters") or [])
+
+
+# -- settings edited in the web UI ---------------------------------------------------------------
+# They live in DATA_DIR/settings.json and win over the YAML file and the environment, so that what you
+# click in the UI is what runs after a restart. "Reset" in the UI (or deleting the file) goes back to
+# the file and the environment.
+EDITABLE = (
+    "interval_seconds",
+    "max_daily_cost_usd",
+    "models",
+    "llm_base_url",
+    "llm_api_key",
+    "mqtt_host",
+    "mqtt_port",
+    "mqtt_user",
+    "mqtt_password",
+    "topic_prefix",
+    "discovery_prefix",
+)
+SECRETS = ("llm_api_key", "mqtt_password")
+
+
+def runtime_file(data_dir: str) -> Path | None:
+    return Path(data_dir) / "settings.json" if data_dir else None
+
+
+def _meter_to_dict(m: Meter) -> dict:
+    d = asdict(m)
+    dc, unit = KINDS.get(m.kind, KINDS["generic"])
+    d["unit"] = "" if m.unit == unit else m.unit  # the kind's default is not stored
+    d["device_class"] = None if m.device_class == dc else m.device_class
+    d["crop"] = list(m.crop) if m.crop else None
+    return d
+
+
+def _validate(s: Settings) -> Settings:
+    if not s.models:
+        raise ValueError("at least one model is needed")
+    if s.interval_seconds < 60:
+        raise ValueError("interval_seconds must be at least 60")
+    if s.max_daily_cost_usd < 0:
+        raise ValueError("max_daily_cost_usd must not be negative")
+    names = [m.name for m in s.meters]
+    if len(names) != len(set(names)):
+        raise ValueError("meter names must be unique")
+    for m in s.meters:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,30}", m.name):
+            raise ValueError(f"meter name {m.name!r}: use lowercase letters, digits, - and _")
+        if m.integer_digits < 1 or m.decimals < 0 or m.digits > 12:
+            raise ValueError(f"meter {m.name!r}: digits out of range")
+        if m.max_rate_per_hour <= 0:
+            raise ValueError(f"meter {m.name!r}: max_rate_per_hour must be positive")
+        if not m.image_url.startswith(("http://", "https://")):
+            raise ValueError(f"meter {m.name!r}: image_url must be an http(s) URL")
+        if m.crop is not None and (
+            len(m.crop) != 4 or m.crop[2] <= m.crop[0] or m.crop[3] <= m.crop[1]
+        ):
+            raise ValueError(f"meter {m.name!r}: crop must be x0,y0,x1,y1 with x1>x0 and y1>y0")
+    return s
+
+
+def with_overrides(self: Settings, patch: dict) -> Settings:
+    unknown = set(patch) - set(EDITABLE) - {"meters"}
+    if unknown:
+        raise ValueError(f"unknown settings {sorted(unknown)}")
+    values = {k: v for k, v in patch.items() if k in EDITABLE}
+    if isinstance(values.get("models"), str):
+        values["models"] = [
+            m.strip() for m in values["models"].replace("\n", ",").split(",") if m.strip()
+        ]
+    if "models" in values:
+        values["models"] = tuple(values["models"])
+    for k in ("interval_seconds", "mqtt_port"):
+        if k in values:
+            values[k] = int(values[k])
+    if "max_daily_cost_usd" in values:
+        values["max_daily_cost_usd"] = float(values["max_daily_cost_usd"])
+    for k in SECRETS:  # an empty secret in a form means "keep"
+        if k in values and values[k] in (None, ""):
+            del values[k]
+    if "meters" in patch:
+        values["meters"] = tuple(_meter(m, dict(os.environ)) for m in patch["meters"])
+    return _validate(replace(self, **values))
+
+
+def with_runtime_overrides(self: Settings) -> Settings:
+    path = runtime_file(self.data_dir)
+    if path is None or not path.is_file():
+        return self
+    return with_overrides(self, json.loads(path.read_text(encoding="utf-8")))
+
+
+def save_runtime(self: Settings) -> bool:
+    """Persist what the UI changed. False when there is no data directory (changes live until restart)."""
+    path = runtime_file(self.data_dir)
+    if path is None:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {k: list(getattr(self, k)) if k == "models" else getattr(self, k) for k in EDITABLE}
+    data["meters"] = [_meter_to_dict(m) for m in self.meters]
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    path.chmod(0o600)  # holds the API key and the MQTT password when they were set in the UI
+    return True
+
+
+def reset_runtime(self: Settings) -> None:
+    path = runtime_file(self.data_dir)
+    if path is not None:
+        path.unlink(missing_ok=True)
+
+
+def public(self: Settings) -> dict:
+    """Everything the UI shows and edits. Secrets are never sent, only whether they are set."""
+    out = {
+        k: list(getattr(self, k)) if k == "models" else getattr(self, k)
+        for k in EDITABLE
+        if k not in SECRETS
+    }
+    out["llm_api_key_set"] = bool(self.llm_api_key)
+    out["mqtt_password_set"] = bool(self.mqtt_password)
+    out["meters"] = [_meter_to_dict(m) for m in self.meters]
+    out["persistent"] = bool(self.data_dir)
+    return out
+
+
+def export_yaml(self: Settings) -> str:
+    """The settings as a config.yml (without secrets): to keep a UI-made setup in git."""
+    doc = {
+        "interval_seconds": self.interval_seconds,
+        "max_daily_cost_usd": self.max_daily_cost_usd,
+        "vision": {
+            "base_url": self.llm_base_url,
+            "api_key_env": "LLM_API_KEY",
+            "models": list(self.models),
+        },
+        "mqtt": {
+            "host": self.mqtt_host,
+            "port": self.mqtt_port,
+            "user": self.mqtt_user,
+            "password_env": "MQTT_PASSWORD",
+            "topic_prefix": self.topic_prefix,
+            "discovery_prefix": self.discovery_prefix,
+        },
+        "meters": [
+            {
+                k: v
+                for k, v in _meter_to_dict(m).items()
+                if v not in (None, "", {}, False) or k == "decimals"
+            }
+            for m in self.meters
+        ],
+    }
+    return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
