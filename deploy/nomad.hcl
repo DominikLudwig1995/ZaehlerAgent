@@ -44,7 +44,15 @@ job "zaehler-agent" {
       name     = "zaehler-agent"
       provider = "consul"
       port     = "http"
-      tags     = ["prometheus-scrape"] # Prometheus finds /metrics through Consul
+      tags = [
+        "prometheus-scrape", # Prometheus finds /metrics through Consul
+        "traefik.enable=true",
+        "traefik.http.routers.zaehler.rule=Host(`zaehler.example.com`)",
+        "traefik.http.routers.zaehler.entrypoints=websecure",
+        "traefik.http.routers.zaehler.tls=true",
+        # UI can set values and trigger paid model calls: login (tinyauth) and LAN only.
+        "traefik.http.routers.zaehler.middlewares=crowdsec-bouncer@file,local-filter@file,tinyauth-check@file",
+      ]
 
       check {
         type     = "http"
