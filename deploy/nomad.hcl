@@ -109,6 +109,9 @@ job "zaehler-agent" {
               kind: gas
               image_url: http://192.0.2.10/img_tmp/alg.jpg
               device_json_url: http://192.0.2.10/json
+          live_url: http://192.0.2.10/capture
+          light_on_url: http://192.0.2.10/lighton
+          light_off_url: http://192.0.2.10/lightoff
               integer_digits: 4
               decimals: 3
               crop: [10, 15, 640, 130]
@@ -119,6 +122,9 @@ job "zaehler-agent" {
               kind: water
               image_url: http://192.0.2.11/img_tmp/raw.jpg   # raw: the aligned picture cuts off the last wheel
               device_json_url: http://192.0.2.11/json
+          live_url: http://192.0.2.11/capture
+          light_on_url: http://192.0.2.11/lighton
+          light_off_url: http://192.0.2.11/lightoff
               integer_digits: 5
               decimals: 3
               crop: [60, 0, 640, 200]

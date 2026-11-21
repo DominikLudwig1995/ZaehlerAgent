@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<base href="/">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>zaehler-agent</title>
 <style>
@@ -87,7 +88,7 @@ button.danger{color:var(--bad);border-color:var(--bad)}
 <body>
 <div class="wrap">
   <header><h1>zaehler-agent</h1>
-    <nav class="nav"><a href="#/" data-v="dash">Dashboard</a><a href="#/meters" data-v="meters">Meters</a><a href="#/settings" data-v="settings">Settings</a></nav>
+    <nav class="nav"><a href="./" data-v="dash">Dashboard</a><a href="meters" data-v="meters">Meters</a><a href="settings" data-v="settings">Settings</a></nav>
     <div class="chips" id="chips"></div></header>
   <div class="grid" id="meters"></div>
   <div id="manage" hidden></div>
@@ -142,12 +143,13 @@ function card(m,s,h){
   const set=$("div","set"),inp=$("input");inp.type="number";inp.step="any";inp.placeholder=fmt(s.value,m.decimals);
   const ok=$("button","primary","Set value");set.append(inp,ok,$("span","msg","what the counter really shows"));
   const act=$("div","actions"),msg=$("span","msg");
-  const rb=$("button","primary","Read now"),sb=$("button","","Set value by hand...");
+  const rb=$("button","primary","Read now"),sb=$("button","","Set value by hand..."),lv=$("button","","Live"),lw=$("label","msg"),lwc=$("input"),cfg=$("a","msg","Meter settings");lwc.type="checkbox";lw.append(lwc,document.createTextNode(" light"));cfg.href="meters/"+encodeURIComponent(m.name);
   rb.onclick=async()=>{rb.disabled=true;msg.textContent="reading (two models)...";try{await api("poll/"+m.name,{method:"POST"});await render()}catch(e){msg.textContent="failed: "+e.message;rb.disabled=false}};
   sb.onclick=()=>{set.classList.toggle("on");inp.focus()};
   ok.onclick=async()=>{const x=parseFloat(inp.value);if(isNaN(x))return;if(!confirm("Set "+m.title+" to "+x+" "+m.unit+"?"))return;
     try{await api("api/meters/"+m.name+"/value",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:x})});await render()}catch(e){msg.textContent="failed: "+e.message}};
-  if(!CFG.read_only)act.append(rb,sb);act.append(msg);c.append(act,set);
+  lv.onclick=()=>{const i=pics.querySelector("img");const fg=i.parentNode;fg.style.display="";i.style.display="";i.src="api/live/"+encodeURIComponent(m.name)+"?light="+lwc.checked+"&t="+Date.now();fg.querySelector("figcaption").textContent=lwc.checked?"live (light on)":"live"};
+  act.append(lv);if(!CFG.read_only)act.append(lw,rb,sb);act.append(cfg,msg);c.append(act,set);
   const det=$("details");det.append($("summary","","History ("+h.readings.length+" latest readings)"));
   const t=$("table"),hr=$("tr");["when","result","digits / reason","cost USD"].forEach(x=>hr.append($("th","",x)));t.append(hr);
   for(const r of h.readings){const tr=$("tr");[ago(r.ts),r.status,r.digits||r.reason||"-"].forEach(x=>tr.append($("td","",x)));tr.append($("td","n",r.cost.toFixed(4)));t.append(tr)}
@@ -174,12 +176,18 @@ document.getElementById("dlg").onclick=e=>e.currentTarget.classList.remove("on")
 /* ---- views --------------------------------------------------------------------------------- */
 let CFG=null;
 const sh=(el,on)=>{el.hidden=!on};
+const PATH=location.pathname.replace(/\/+$/,"");
 function route(){
-  const v=location.hash.startsWith("#/meters")?"meters":location.hash.startsWith("#/settings")?"settings":"dash";
+  const v=PATH.startsWith("/meters")?"meters":PATH==="/settings"?"settings":"dash";
   document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("on",a.dataset.v===v));
   sh(document.getElementById("meters"),v==="dash");sh(document.getElementById("manage"),v!=="dash");
-  if(v==="meters")viewMeters();else if(v==="settings")viewSettings();else render()}
-window.addEventListener("hashchange",route);
+  if(v==="meters"){const n=decodeURIComponent(PATH.split("/")[2]||"");if(!n)viewMeters();else viewMeterPage(n)}else if(v==="settings")viewSettings();else render()}
+async function viewMeterPage(n){
+  const root=document.getElementById("manage");root.replaceChildren();CFG=await api("api/settings");ro(root);
+  if(n==="new"){editMeter(null);return}
+  const m=CFG.meters.find(x=>x.name===n);
+  if(!m){const p=$("section","panel");p.append($("h2","","Meter not found"),$("p","hint","There is no meter called "+n+"."));const a=$("a","","Back to the meters");a.href="meters";p.append(a);root.append(p);return}
+  editMeter(m)}
 function ro(root){if(CFG&&CFG.read_only){root.prepend($("div","banner","Read-only instance: changes are disabled (READ_ONLY=true)."));}}
 async function send(method,url,body){
   const r=await fetch(url,{method,headers:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
@@ -196,14 +204,14 @@ async function viewMeters(){
   for(const m of CFG.meters){
     const r=$("div","mrow"),i=$("div");i.append($("div","t",m.title+"  ("+m.name+")"),$("div","u",m.image_url));r.append(i);
     const sp=$("div","sp"),e=$("button","","Edit"),d=$("button","danger","Delete");
-    e.onclick=()=>editMeter(m);d.onclick=async()=>{if(!confirm("Delete meter "+m.title+"? Its Home Assistant sensor is removed."))return;try{await send("DELETE","api/meters/"+m.name);viewMeters()}catch(x){alert(x.message)}};
+    e.onclick=()=>{location.href="meters/"+encodeURIComponent(m.name)};d.onclick=async()=>{if(!confirm("Delete meter "+m.title+"? Its Home Assistant sensor is removed."))return;try{await send("DELETE","api/meters/"+m.name);viewMeters()}catch(x){alert(x.message)}};
     if(!CFG.read_only)sp.append(e,d);r.append(sp);p.append(r)}
-  if(!CFG.read_only){const a=$("button","primary","Add meter");a.onclick=()=>editMeter(null);const w=$("div","row");w.append(a);p.append(w)}
-  root.append(p);const ed=$("div");ed.id="editor";root.append(ed)}
+  if(!CFG.read_only){const a=$("button","primary","Add meter");a.onclick=()=>{location.href="meters/new"};const w=$("div","row");w.append(a);p.append(w)}
+  root.append(p)}
 function editMeter(m){
   const isNew=!m;m=m||{name:"",title:"",kind:"water",image_url:"",integer_digits:5,decimals:3,crop:null,rotate:0,mirror:false,max_rate_per_hour:2,image_headers:{},device_json_url:"",initial_value:null};
-  const box=document.getElementById("editor");box.replaceChildren();
-  const p=$("section","panel");p.append($("h2","",isNew?"Add meter":"Edit "+m.title));
+  const box=document.getElementById("manage");box.replaceChildren();ro(box);const back=$("a","msg","< All meters");back.href="meters";box.append(back);
+  const p=$("section","panel");p.append($("h2","",isNew?"Add meter":"Settings of "+m.title));
   const f={};const form=$("div","form");
   f.name=inp("text",m.name,{placeholder:"water",disabled:!isNew});f.title=inp("text",m.title,{placeholder:"Water meter"});
   f.kind=$("select");["gas","water","electricity","heat","generic"].forEach(k=>{const o=$("option","",k);o.value=k;f.kind.append(o)});f.kind.value=m.kind;
@@ -213,17 +221,22 @@ function editMeter(m){
   f.rotate=inp("number",m.rotate);f.mirror=$("select");[["false","no"],["true","yes"]].forEach(([v,t])=>{const o=$("option","",t);o.value=v;f.mirror.append(o)});f.mirror.value=String(!!m.mirror);
   f.crop=inp("text",m.crop?m.crop.join(","):"",{placeholder:"x0,y0,x1,y1 (draw it on the picture)"});
   f.device=inp("url",m.device_json_url,{placeholder:"optional: AI-on-the-edge /json"});
+  f.live=inp("url",m.live_url,{placeholder:"optional: fresh picture, e.g. http://cam/capture"});f.lon=inp("url",m.light_on_url,{placeholder:"optional: http://cam/lighton"});f.loff=inp("url",m.light_off_url,{placeholder:"optional: http://cam/lightoff"});f.settle=inp("number",m.light_settle_seconds??2);
   f.headers=$("textarea");f.headers.value=Object.entries(m.image_headers||{}).map(([k,v])=>k+": "+v).join("\n");f.headers.placeholder="Authorization: Bearer ...  (one per line, optional)";
   [["Name (id)",f.name],["Title",f.title],["Kind",f.kind],["Picture URL",f.image_url,1],["Whole-number wheels",f.integer_digits],["Decimal wheels",f.decimals],
    ["Max. rise per hour",f.max_rate],["Start value (optional)",f.initial],["Rotate (deg, counter-clockwise)",f.rotate],["Mirror",f.mirror],["Crop of the digit row",f.crop,1],
-   ["Camera's own reading URL",f.device,1],["Request headers",f.headers,1]].forEach(([l,e,w])=>form.append(field(l,e,w)));
-  p.append(form);
+   ["Camera's own reading URL",f.device,1],["Live picture URL",f.live,1],["Light on URL",f.lon],["Light off URL",f.loff],["Wait after light on (s)",f.settle],["Request headers",f.headers,1]].forEach(([l,e,w])=>form.append(field(l,e,w)));
+  const pre=$("div","row");const ip=inp("text","",{placeholder:"camera IP, e.g. 192.168.1.50"});ip.style.maxWidth="220px";
+  const fill=$("button","","Fill for AI-on-the-edge");
+  fill.onclick=()=>{const h=ip.value.trim();if(!h)return;const b="http://"+h;f.image_url.value=b+"/img_tmp/raw.jpg";f.device.value=b+"/json";f.live.value=b+"/capture";f.lon.value=b+"/lighton";f.loff.value=b+"/lightoff"};
+  pre.append($("span","msg","Quick start:"),ip,fill);
+  p.append(pre,form);
   const stage=$("div"),res=$("div");
   const body=()=>{const h={};f.headers.value.split("\n").forEach(l=>{const i=l.indexOf(":");if(i>0)h[l.slice(0,i).trim()]=l.slice(i+1).trim()});
     const c=f.crop.value.trim()?f.crop.value.split(",").map(x=>Math.round(parseFloat(x))):null;
     return {name:f.name.value||"test",title:f.title.value||f.name.value,kind:f.kind.value,image_url:f.image_url.value,integer_digits:+f.integer_digits.value,decimals:+f.decimals.value,
       max_rate_per_hour:+f.max_rate.value,initial_value:f.initial.value===""?null:+f.initial.value,rotate:+f.rotate.value||0,mirror:f.mirror.value==="true",crop:c,
-      device_json_url:f.device.value,image_headers:h}};
+      device_json_url:f.device.value,live_url:f.live.value,light_on_url:f.lon.value,light_off_url:f.loff.value,light_settle_seconds:+f.settle.value||0,image_headers:h}};
   const probeUrl=(crop)=>{const b=body();const q=new URLSearchParams({url:b.image_url,rotate:b.rotate,mirror:b.mirror,headers:Object.entries(b.image_headers).map(([k,v])=>k+": "+v).join("\n")});if(crop&&b.crop)q.set("crop",b.crop.join(","));q.set("t",Date.now());return "api/probe?"+q};
   function showPicture(){
     stage.replaceChildren();const w=$("div","crop"),img=$("img"),bx=$("div","box");img.src=probeUrl(false);img.draggable=false;
@@ -237,6 +250,11 @@ function editMeter(m){
     w.onpointermove=e=>{if(!st)return;const c=pt(e);f.crop.value=[Math.min(st[0],c[0]),Math.min(st[1],c[1]),Math.max(st[0],c[0]),Math.max(st[1],c[1])].join(",");place()};
     w.onpointerup=()=>{st=null}}
   const row=$("div","row");
+  const live=$("button","","Live picture"),lt=$("label","msg"),ltc=$("input");ltc.type="checkbox";lt.append(ltc,document.createTextNode(" with light"));
+  live.onclick=()=>{stage.replaceChildren();const i=$("img");i.style.maxWidth="100%";i.style.borderRadius="8px";
+    i.src=isNew?probeUrl(false):"api/live/"+encodeURIComponent(m.name)+"?light="+ltc.checked+"&t="+Date.now();
+    i.onerror=()=>stage.replaceChildren($("div","result","No live picture. Check the camera; the live view of a saved meter uses the saved URLs."));
+    stage.append($("div","msg",ltc.checked&&!isNew?"Light on for this shot.":"Live picture."),i)};
   const load=$("button","","Load picture"),prev=$("button","","Preview what the models see"),test=$("button","","Test read"),save=$("button","primary","Save"),cancel=$("button","","Cancel");
   load.onclick=showPicture;
   prev.onclick=()=>{stage.replaceChildren();const i=$("img");i.src=probeUrl(true);i.style.maxWidth="100%";i.style.borderRadius="8px";i.onerror=()=>stage.replaceChildren($("div","result","No preview: load the picture and draw the crop first."));stage.append($("div","msg","This is exactly what the models get (contrast stretched, 2x enlarged)."),i)};
@@ -244,9 +262,9 @@ function editMeter(m){
     try{const r=await send("POST","api/meters/test",body());const d=$("div","result");
       if(!r.ok)d.textContent="Failed: "+r.error;else{d.append("voted ");d.append($("code","",r.digits));d.append(document.createTextNode("   per model: "+r.samples.join(" / ")+"   agreement "+Math.round(r.agreement*100)+"%   cost "+r.cost_usd+" USD"))}
       res.replaceChildren(d)}catch(x){res.replaceChildren($("div","result","Failed: "+x.message))}test.disabled=false};
-  save.onclick=async()=>{try{const b=body();if(isNew)await send("POST","api/meters",b);else await send("PUT","api/meters/"+m.name,b);viewMeters()}catch(x){res.replaceChildren($("div","result","Not saved: "+x.message))}};
-  cancel.onclick=()=>box.replaceChildren();
-  row.append(load,prev,test,save,cancel);p.append(row,stage,res);box.append(p);box.scrollIntoView({behavior:"smooth"});
+  save.onclick=async()=>{try{const b=body();if(isNew)await send("POST","api/meters",b);else await send("PUT","api/meters/"+m.name,b);location.href="meters"}catch(x){res.replaceChildren($("div","result","Not saved: "+x.message))}};
+  cancel.onclick=()=>{location.href="meters"};
+  row.append(load,live,lt,prev,test,save,cancel);p.append(row,stage,res);box.append(p);
   if(f.image_url.value)showPicture()}
 
 /* ---- settings ----------------------------------------------------------------------------- */
@@ -274,7 +292,7 @@ async function viewSettings(){
   if(!S.read_only)row.append(save,rst);row.append(exp);
   root.append(p,q,row,res)}
 
-route();setInterval(()=>{if(!document.hidden&&!location.hash.match(/meters|settings/)&&!document.querySelector(".set.on")&&!document.querySelector("input:focus"))render()},30000);
+route();setInterval(()=>{if(!document.hidden&&PATH===""&&!document.querySelector(".set.on")&&!document.querySelector("input:focus"))render()},30000);
 </script>
 </body>
 </html>

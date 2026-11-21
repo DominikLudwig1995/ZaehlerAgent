@@ -51,6 +51,10 @@ class Meter:
         ""  # optional: the camera's own reading (AI-on-the-edge /json), shown for comparison
     )
     initial_value: float | None = None  # known value to start from while nothing is stored yet
+    live_url: str = ""  # a fresh picture on demand (AI-on-the-edge: /capture); default: image_url
+    light_on_url: str = ""  # GET before the live picture, e.g. http://cam/lighton
+    light_off_url: str = ""  # GET afterwards, e.g. http://cam/lightoff
+    light_settle_seconds: float = 2.0  # wait after the light went on
     unit: str = ""  # default by kind
     device_class: str | None = None  # default by kind
 
@@ -214,6 +218,15 @@ def _validate(s: Settings) -> Settings:
             raise ValueError(f"meter name {m.name!r}: use lowercase letters, digits, - and _")
         if m.integer_digits < 1 or m.decimals < 0 or m.digits > 12:
             raise ValueError(f"meter {m.name!r}: digits out of range")
+        for label, url in (
+            ("live_url", m.live_url),
+            ("light_on_url", m.light_on_url),
+            ("light_off_url", m.light_off_url),
+        ):
+            if url and not url.startswith(("http://", "https://")):
+                raise ValueError(f"meter {m.name!r}: {label} must be an http(s) URL")
+        if not 0 <= m.light_settle_seconds <= 30:
+            raise ValueError(f"meter {m.name!r}: light_settle_seconds must be between 0 and 30")
         if m.max_rate_per_hour <= 0:
             raise ValueError(f"meter {m.name!r}: max_rate_per_hour must be positive")
         if not m.image_url.startswith(("http://", "https://")):

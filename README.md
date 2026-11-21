@@ -8,7 +8,7 @@ Reads mechanical meters (gas, water, electricity, heat: digit wheels) with visio
 
 ## Release notes
 
-**2.0.0** (2026-11-21): everything is configurable in the web UI, including adding and removing cameras/meters. 1.x: multi-model voting, plausibility check, Home Assistant discovery, Prometheus metrics, history, docker compose. Full list: [CHANGELOG.md](CHANGELOG.md).
+**2.1.0** (2026-11-21): own page per view and per meter, live picture with the camera's light. **2.0.0**: everything is configurable in the web UI, including adding and removing cameras/meters. 1.x: multi-model voting, plausibility check, Home Assistant discovery, Prometheus metrics, history, docker compose. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 Cameras (for example ESP32 with [AI-on-the-edge-device](https://github.com/jomjol/AI-on-the-edge-device)) look at the digit
 wheels. Their own small neural network reads them badly (blurry wheels, glare, a camera that sits a bit off).
@@ -97,7 +97,7 @@ variables override the file; what you saved in the UI overrides both.
 
 Per meter: `name`, `title`, `kind` (gas, water, electricity, heat, generic: sets unit and Home Assistant class),
 `image_url` (+ `image_headers`), `integer_digits`, `decimals`, `crop`, `rotate`, `mirror`, `max_rate_per_hour`,
-`initial_value`, `device_json_url`.
+`initial_value`, `device_json_url`, `live_url`, `light_on_url`, `light_off_url`, `light_settle_seconds`.
 
 Home Assistant gets one `total_increasing` sensor per meter. Attributes show the decision (`accepted`, `unchanged`,
 `rejected`), the digits each model read, the camera's own reading and the cost of the day. The last values are
@@ -109,6 +109,7 @@ or the *Set value by hand* button.
 | | |
 |-|-|
 | `GET /` | web UI: value, decision, the camera picture and the crop the models saw, history chart, "Read now" |
+| `GET /api/live/{name}?light=true` | a fresh picture now, optionally with the camera's light on |
 | `GET /status`, `/api/config`, `/api/history/{name}`, `/api/image/{name}?crop=` | JSON and pictures |
 | `POST /poll/{name}` | read one meter now |
 | `GET/PUT /api/settings`, `DELETE /api/settings`, `GET /api/settings/export` | the settings the UI edits |

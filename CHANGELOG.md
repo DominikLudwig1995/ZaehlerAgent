@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.0] - 2026-11-21
+
+- Every view has its own page and URL: `/`, `/meters`, `/meters/new`, `/meters/<name>` (the settings of one
+  meter), `/settings`.
+- Live picture on demand (`GET /api/live/{name}`), optionally with the camera's light: per meter `live_url`,
+  `light_on_url`, `light_off_url`, `light_settle_seconds`. The light is switched off again even when the shot
+  fails. Dashboard: *Live* button with a *light* checkbox. The meter form has a quick start for
+  AI-on-the-edge cameras (`/capture`, `/lighton`, `/lightoff`).
+
 ## [2.0.0] - 2026-11-21
 
 - Everything is configurable in the web UI: models, API key and base URL, interval, budget, MQTT, and the meters.

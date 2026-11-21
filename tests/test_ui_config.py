@@ -194,3 +194,68 @@ def test_reconfigure_adds_removes_and_moves_mqtt(settings, gas):
     svc.reconfigure(replace(svc.settings, meters=(replace(water, title="Wasser"),)))
     assert svc.state["water"].image_hash == ""
     assert svc._wake.is_set()
+
+
+@respx.mock
+async def test_live_picture_switches_the_light_on_and_off(settings, gas, jpeg):
+    cam = replace(
+        gas,
+        live_url="http://cam/capture",
+        light_on_url="http://cam/lighton",
+        light_off_url="http://cam/lightoff",
+        light_settle_seconds=0,
+    )
+    on = respx.get("http://cam/lighton").mock(return_value=httpx.Response(200))
+    shot = respx.get("http://cam/capture").mock(return_value=httpx.Response(200, content=jpeg))
+    off = respx.get("http://cam/lightoff").mock(return_value=httpx.Response(200))
+    svc = MeterService(settings, VisionClient("k", "m/x"), None)
+    assert await svc.live(cam, light=True) == jpeg
+    assert on.called and shot.called and off.called
+    on.reset(), off.reset()
+    assert (
+        await svc.live(cam) == jpeg and not on.called and not off.called
+    )  # no light asked: untouched
+    # the light goes off even when the picture fails
+    shot.mock(return_value=httpx.Response(500))
+    with pytest.raises(httpx.HTTPStatusError):
+        await svc.live(cam, light=True)
+    assert off.called
+    # no live_url: the normal picture URL is used
+    respx.get(gas.image_url).mock(return_value=httpx.Response(200, content=jpeg))
+    assert await svc.live(gas) == jpeg
+
+
+def test_light_settings_are_validated(settings):
+    with pytest.raises(ValueError):
+        with_overrides(settings, {"meters": [{**METER, "light_on_url": "ftp://x"}]})
+    with pytest.raises(ValueError):
+        with_overrides(settings, {"meters": [{**METER, "light_settle_seconds": 99}]})
+    ok = with_overrides(
+        settings,
+        {"meters": [{**METER, "live_url": "http://c/capture", "light_on_url": "http://c/on"}]},
+    )
+    assert ok.meters[0].live_url == "http://c/capture"
+
+
+@respx.mock
+def test_live_endpoint_and_page_routes(monkeypatch, tmp_path, jpeg):
+    monkeypatch.setenv("CONFIG_FILE", str(tmp_path / "none.yml"))
+    monkeypatch.delenv("MQTT_HOST", raising=False)
+    monkeypatch.setenv("INTERVAL_SECONDS", "3600")
+    respx.get("http://cam/raw.jpg").mock(return_value=httpx.Response(200, content=jpeg))
+    with TestClient(app) as c:
+        c.post(
+            "/api/meters",
+            json={**METER, "light_on_url": "http://cam/on", "light_settle_seconds": 0},
+        )
+        assert c.get("/api/live/water").content == jpeg
+        assert c.get("/api/live/none").status_code == 404
+        respx.get("http://cam/on").mock(return_value=httpx.Response(200))
+        assert c.get("/api/live/water", params={"light": "true"}).status_code == 200
+        respx.get("http://cam/raw.jpg").mock(return_value=httpx.Response(500))
+        assert c.get("/api/live/water").status_code == 502
+        for path in ("/", "/settings", "/meters", "/meters/new", "/meters/water"):
+            assert "zaehler-agent" in c.get(path).text
+    monkeypatch.setenv("READ_ONLY", "true")
+    with TestClient(app) as c:
+        assert c.get("/api/live/water", params={"light": "true"}).status_code == 403
