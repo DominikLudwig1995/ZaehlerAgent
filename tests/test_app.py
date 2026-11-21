@@ -44,3 +44,11 @@ def test_example_config_is_valid():
 
     s = Settings.load({"CONFIG_FILE": "config/config.example.yml"})
     assert s.meters and s.models and s.llm_base_url.startswith("https://")
+
+
+def test_build_service_passes_base_url_as_keyword():
+    from app.config import Settings
+    from app.main import build_service
+
+    svc = build_service(Settings(llm_base_url="http://ollama:11434/v1", models=("m",)))
+    assert svc.vision.base_url == "http://ollama:11434/v1"

@@ -26,7 +26,7 @@ def build_service(settings: Settings) -> MeterService:
         publisher.connect()
     service = MeterService(
         settings,
-        VisionClient(settings.llm_api_key, settings.models[0], settings.llm_base_url),
+        VisionClient(settings.llm_api_key, settings.models[0], base_url=settings.llm_base_url),
         publisher,
     )
     service.restore()
