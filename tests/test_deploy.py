@@ -18,3 +18,9 @@ def test_nomad_inline_config_loads(tmp_path):
     s = Settings.load({"CONFIG_FILE": str(cfg)})
     assert [m.name for m in s.meters] == ["gas", "wasser"]
     assert all(m.live_url and m.light_on_url and m.light_off_url for m in s.meters)
+
+
+def test_nomad_job_keeps_the_data_across_allocations():
+    hcl = Path("deploy/nomad.hcl").read_text(encoding="utf-8")
+    assert re.search(r"ephemeral_disk\s*\{[^}]*sticky\s*=\s*true[^}]*migrate\s*=\s*true", hcl)
+    assert 'DATA_DIR         = "/alloc/data"' in hcl

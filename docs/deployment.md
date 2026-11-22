@@ -61,8 +61,11 @@ secrets from Vault, Traefik labels with forward auth, a Consul health check and 
 Adapt addresses, domain and secret paths; the structure is a good starting point. A CI test parses the inline config
 so a typo cannot reach the cluster.
 
-Without a persistent volume the UI changes are lost when the allocation moves. Keep the config of such a setup in the
-job (export it with *Download as config.yml*) or add a host volume for `/data`.
+The job keeps `DATA_DIR` in the allocation directory (`/alloc/data`) on a sticky, migrating ephemeral disk. History
+and everything changed in the UI survive updates, restarts and a reschedule to another node. A node that is lost for
+good takes them along; the config inside the job is the fallback. Once something was saved in the UI,
+`settings.json` wins over the config in the job; *Reset to file / environment* in Settings drops it again. For
+stronger guarantees mount a host or CSI volume on `/data` instead.
 
 ## Upgrading
 

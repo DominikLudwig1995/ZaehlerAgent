@@ -20,6 +20,15 @@ job "zaehler-agent" {
   group "app" {
     count = 1
 
+    # History and the settings edited in the UI live in the allocation directory (/alloc/data). A sticky,
+    # migrating ephemeral disk carries them over to the next allocation of an update or a reschedule.
+    # A node that is lost for good loses them (the config below is the fallback).
+    ephemeral_disk {
+      sticky  = true
+      migrate = true
+      size    = 300
+    }
+
     network {
       port "http" {
         to = 8000
@@ -135,6 +144,8 @@ job "zaehler-agent" {
 
       env {
         CONFIG_FILE      = "/local/config.yml"
+        # Settings saved in the UI (settings.json) win over the config below. "Reset" in the UI goes back to it.
+        DATA_DIR         = "/alloc/data"
         MQTT_HOST        = "192.0.2.20"
         INTERVAL_SECONDS = "1800"
         MODELS           = "openai/gpt-4o-mini,qwen/qwen3-vl-30b-a3b-instruct"
