@@ -29,3 +29,14 @@ def test_metrics_render():
     out = m.render()
     assert 'zaehler_readings_total{meter="gas",status="accepted"} 1' in out
     assert 'meter="ga\\"s"' in out and "# TYPE zaehler_value gauge" in out
+
+
+def test_metrics_keep_full_precision():
+    m = Metrics()
+    m.set("zaehler_last_accepted_timestamp_seconds", 1795335472.25, meter="gas")
+    m.set("zaehler_value", 3605.365, meter="gas")
+    m.inc("zaehler_readings_total", 2_000_000, meter="gas", status="accepted")
+    out = m.render()
+    assert 'zaehler_last_accepted_timestamp_seconds{meter="gas"} 1795335472.25' in out
+    assert 'zaehler_value{meter="gas"} 3605.365' in out
+    assert 'status="accepted"} 2000000' in out

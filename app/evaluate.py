@@ -88,7 +88,7 @@ async def run(args: argparse.Namespace) -> int:
             f"  {name:7} {model:42} Ziffern {right}/{total} = {100 * right / max(total, 1):5.1f} %   "
             f"Bilder voll richtig {full}/{n}"
         )
-    print(f"Kosten: {cost:.4f} USD")
+    print(f"Cost: {cost:.4f} USD")
     return 0
 
 

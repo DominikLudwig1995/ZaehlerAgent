@@ -1,7 +1,19 @@
 [project]
 name = "zaehler-agent"
-version = "2.1.0"
-description = "Liest Gas- und Wasserzaehler per Vision-Modell (OpenRouter) von den AI-on-the-edge-Kameras und meldet die Werte per MQTT an Home Assistant"
+version = "2.2.0"
+description = "Read mechanical gas, water, electricity and heat meters with vision models and report them to Home Assistant"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Dominik Ludwig" }]
+keywords = ["home-assistant", "meter-reading", "vision-llm", "mqtt", "ocr", "energy"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: FastAPI",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Home Automation",
+]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -12,15 +24,22 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/DominikLudwig1995/ZaehlerAgent"
+Issues = "https://github.com/DominikLudwig1995/ZaehlerAgent/issues"
+Changelog = "https://github.com/DominikLudwig1995/ZaehlerAgent/blob/main/CHANGELOG.md"
+
 # uv dev group (PEP 735): `uv sync` installs it, the container build uses
 # `uv sync --no-dev`, so production never carries test and lint tools.
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=8.3.0",
     "pytest-asyncio>=1.5.0",
     "pytest-cov>=6.0.0",
     "respx>=0.23.1",
     "ruff>=0.8.0",
+    "types-pyyaml>=6.0.12.20261113",
 ]
 
 # Deployed application (uvicorn runs app.main:app), not a library.
@@ -31,7 +50,7 @@ package = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
-addopts = "--cov=app --cov-report=term-missing"
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=90"
 
 [tool.ruff]
 line-length = 100
@@ -40,3 +59,9 @@ line-length = 100
 select = ["E", "F", "I", "B", "UP", "SIM"]
 # Docstrings, comments and the prompt text are prose; the formatter keeps the code itself within 100.
 ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

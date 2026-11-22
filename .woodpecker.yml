@@ -20,6 +20,7 @@ steps:
       - uv sync --frozen
       - uv run ruff check .
       - uv run ruff format --check .
+      - uv run mypy app
       - uv run pytest
 
   # Shows vulnerabilities in the log without stopping the pipeline. Remove

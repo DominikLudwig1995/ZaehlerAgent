@@ -43,13 +43,20 @@ class History:
             self._db.executescript(SCHEMA)
         self.purge()
 
-    def add(self, meter: str, detail: dict, value: float | None, cost: float = 0.0) -> None:
+    def add(
+        self,
+        meter: str,
+        detail: dict,
+        value: float | None,
+        cost: float = 0.0,
+        ts: float | None = None,
+    ) -> None:
         with self._lock:
             self._db.execute(
                 "insert into readings (ts, meter, status, reason, digits, value, confidence, agreement, cost,"
                 " samples, models, device_reading) values (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    time.time(),
+                    time.time() if ts is None else ts,
                     meter,
                     detail.get("status", ""),
                     detail.get("reason", "") or detail.get("detail", ""),

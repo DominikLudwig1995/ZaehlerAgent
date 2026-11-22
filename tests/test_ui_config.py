@@ -82,8 +82,8 @@ def test_settings_and_meter_endpoints(monkeypatch, tmp_path):
         assert c.post("/api/meters", json=METER).status_code == 409
         assert c.post("/api/meters", json={**METER, "name": "Bad"}).status_code == 422
         assert (
-            c.put("/api/meters/water", json={"title": "Wasser"}).json()["meters"][0]["title"]
-            == "Wasser"
+            c.put("/api/meters/water", json={"title": "Water renamed"}).json()["meters"][0]["title"]
+            == "Water renamed"
         )
         assert c.put("/api/meters/none", json={}).status_code == 404
         out = c.put("/api/settings", json={"models": "a/b", "interval_seconds": 600, "meters": []})
@@ -191,7 +191,7 @@ def test_reconfigure_adds_removes_and_moves_mqtt(settings, gas):
 
     # an edited meter is read again at the next round
     svc.state["water"].image_hash = "abc"
-    svc.reconfigure(replace(svc.settings, meters=(replace(water, title="Wasser"),)))
+    svc.reconfigure(replace(svc.settings, meters=(replace(water, title="Water renamed"),)))
     assert svc.state["water"].image_hash == ""
     assert svc._wake.is_set()
 

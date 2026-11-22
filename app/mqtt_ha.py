@@ -86,7 +86,7 @@ def discovery_messages(settings: Settings) -> list[tuple[str, str]]:
             "availability_topic": f"{settings.topic_prefix}/status",
             "device": {
                 "identifiers": ["zaehler_agent"],
-                "name": "Zähler-Agent",
+                "name": "ZaehlerAgent",
                 "manufacturer": "zaehler-agent",
                 "model": "Vision reader for AI-on-the-edge cameras",
             },
