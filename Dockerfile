@@ -2,7 +2,7 @@ FROM docker.io/library/python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
-COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d /uv /usr/local/bin/uv
 
 # Security fixes of the base image: newer zlib, and no pip/setuptools at runtime (their vendored packages carry CVEs).
 RUN apt-get update && apt-get install -y --no-install-recommends --only-upgrade zlib1g \

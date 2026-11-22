@@ -34,7 +34,7 @@ steps:
 
   # Container image: validated on PRs, pushed to Harbor from main.
   image-check:
-    image: woodpeckerci/plugin-kaniko:2.3.3
+    image: woodpeckerci/plugin-kaniko:2.3.5@sha256:a481d1dbf661af90b6781735438a35c7b03a9d20510a8b4e5aa16166ea609e0b
     settings:
       dry-run: true
       registry: registry.example.com
@@ -47,7 +47,7 @@ steps:
           exclude: ["**/*.md", "*.md", "LICENSE*", "docs/**"]
 
   image:
-    image: woodpeckerci/plugin-kaniko:2.3.3
+    image: woodpeckerci/plugin-kaniko:2.3.5@sha256:a481d1dbf661af90b6781735438a35c7b03a9d20510a8b4e5aa16166ea609e0b
     settings:
       registry: registry.example.com
       repo: homelab/zaehler-agent
