@@ -69,7 +69,7 @@ def prepare_image(
         x0, y0, x1, y1 = crop
         img = img.crop((max(0, x0), max(0, y0), min(w, x1), min(h, y1)))
     img = ImageOps.autocontrast(img, cutoff=1)
-    img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
+    img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
     return _jpeg(img)
 
 

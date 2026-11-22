@@ -1,0 +1,45 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read [troubleshooting](https://github.com/DominikLudwig1995/ZaehlerAgent/blob/main/docs/troubleshooting.md) first.
+        **Do not paste API keys or passwords.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Image tag or release, for example 2.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: How do you run it?
+      options: [docker compose, docker run, Nomad / Kubernetes, from source]
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Meter settings (no secrets)
+      description: Settings, Download as config.yml
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Agent log
+      render: text
+  - type: textarea
+    id: picture
+    attributes:
+      label: Picture
+      description: The "what the models see" preview from the meter page. Blur anything private.

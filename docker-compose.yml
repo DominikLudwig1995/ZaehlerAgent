@@ -3,7 +3,7 @@
 # Optional: copy .env.example to .env (LLM_API_KEY), or start from a file: see config/config.example.yml.
 services:
   zaehler-agent:
-    image: ghcr.io/dominikludwig1995/zaehler-agent:latest
+    image: ghcr.io/dominikludwig1995/zaehleragent:latest
     build: .   # `docker compose up -d --build` builds from source instead of pulling
     restart: unless-stopped
     ports:

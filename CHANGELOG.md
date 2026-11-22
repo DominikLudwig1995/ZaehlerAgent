@@ -1,5 +1,23 @@
 # Changelog
 
+All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com), versions
+follow [semver](https://semver.org).
+
+## [2.2.0] - 2026-11-22
+
+First public release.
+
+- New documentation: the README says what the project is for, the details moved to `docs/` (how it works,
+  configuration, Home Assistant, deployment, API and metrics, accuracy, troubleshooting, development).
+- `scripts/demo.py`: a running agent with a fake camera, fake models and seeded history, no hardware or API key.
+- Contributing guide, security policy, issue and pull request templates.
+- Type checking with mypy in CI, tests on Python 3.11 and 3.14, coverage must stay above 90 %.
+- Fix: Prometheus metrics keep full precision. Timestamps were rounded to six digits, which made
+  `zaehler_last_accepted_timestamp_seconds` off by more than an hour.
+- Fix: the Home Assistant device is called `ZaehlerAgent` (was `Zähler-Agent`). Existing sensors keep their entity
+  ids; only new installs get `sensor.zaehleragent_*`.
+- Fix: setting a value by hand returned a stale decision when a poll ran at the same moment.
+
 ## [2.1.0] - 2026-11-21
 
 - Every view has its own page and URL: `/`, `/meters`, `/meters/new`, `/meters/<name>` (the settings of one

@@ -210,13 +210,15 @@ class MeterService:
             r = await self.http.get(meter.image_url, headers=meter.image_headers)
             r.raise_for_status()
         except httpx.HTTPError as exc:
-            return self._fail(meter, "camera unreachable", str(exc)[:120])
+            self._fail(meter, "camera unreachable", str(exc)[:120])
+            return None
         digest = hashlib.sha256(r.content).hexdigest()[:16]
         if digest == st.image_hash and not force:
             return None  # the camera has not taken a new picture since the last poll
         if not self._budget_left():
             self.metrics.set("zaehler_budget_exhausted", 1)
-            return self._fail(meter, "daily budget used up", "")
+            self._fail(meter, "daily budget used up", "")
+            return None
         self.metrics.set("zaehler_budget_exhausted", 0)
         st.image = r.content
         try:
@@ -235,7 +237,8 @@ class MeterService:
             if isinstance(x, BaseException):
                 self.metrics.inc("zaehler_model_errors_total", model=m)
         if not good:
-            return self._fail(meter, "model failed", "; ".join(str(x)[:80] for x in results), cost)
+            self._fail(meter, "model failed", "; ".join(str(x)[:80] for x in results), cost)
+            return None
         st.image_hash = digest
         digits, agreement, alternatives = vote([x.digits for x in good])
         decision = decide(meter, digits, st.last, now, alternatives)
@@ -304,7 +307,6 @@ class MeterService:
             publish_reading(
                 self.publisher, self.settings, meter, st.last.value if st.last else None, st.detail
             )
-        return None
 
     async def run_forever(self) -> None:
         while True:
