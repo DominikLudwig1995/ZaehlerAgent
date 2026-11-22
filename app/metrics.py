@@ -17,6 +17,11 @@ def _labels(**kv: str) -> str:
     return "{" + inner + "}"
 
 
+def _num(v: float) -> str:
+    """Full precision: a Unix timestamp or a counter reading must not be rounded to 6 digits."""
+    return str(int(v)) if float(v).is_integer() else repr(float(v))
+
+
 class Metrics:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -57,10 +62,10 @@ class Metrics:
             families: dict[str, list[str]] = defaultdict(list)
             kinds: dict[str, str] = {}
             for (name, lab), v in sorted(self.counters.items()):
-                families[name].append(f"{name}{_labels(**dict(lab))} {v:g}")
+                families[name].append(f"{name}{_labels(**dict(lab))} {_num(v)}")
                 kinds[name] = "counter"
             for (name, lab), v in sorted(self.gauges.items()):
-                families[name].append(f"{name}{_labels(**dict(lab))} {v:.6g}")
+                families[name].append(f"{name}{_labels(**dict(lab))} {_num(v)}")
                 kinds[name] = "gauge"
         for name, lines in families.items():
             out.append(f"# HELP {name} {helps.get(name, name)}")
