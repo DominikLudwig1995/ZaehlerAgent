@@ -21,7 +21,7 @@ services:
   # Optional: a local broker, if you have none. Point mqtt.host at "mosquitto" and enable it with
   #   docker compose --profile mqtt up -d
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2@sha256:fa12172a051310efe5bcb7a6a11b77bd5faacb82cbacd7742aa758bf024fd8e4
     profiles: [mqtt]
     restart: unless-stopped
     ports:
