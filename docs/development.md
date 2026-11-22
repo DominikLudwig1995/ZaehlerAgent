@@ -28,6 +28,11 @@ uv run pytest            # coverage is measured, the build fails below 90 %
 `pre-commit install` runs the same linters and a check for mangled umlauts (`scripts/check_mojibake.py`) before
 every commit. CI runs everything on GitHub Actions, plus a `docker compose` smoke test and a Trivy scan of the image.
 
+## Dependencies
+
+Version updates (Python packages, Docker base images, GitHub Actions) come from Renovate on the maintainer's
+server and arrive through the normal release flow. GitHub's Dependabot *security* updates and alerts stay on.
+
 ## Layout
 
 ```
